@@ -1,0 +1,19 @@
+name: production-incident-debugging-environment
+version: "1.0.0"
+entrypoint: server.app:app
+framework: fastapi
+environment:
+  api:
+    reset: /reset
+    step: /step
+    state: /state
+  default_task: easy
+  max_steps: 12
+tasks:
+  - easy
+  - medium
+  - hard
+metadata:
+  title: Production Incident Debugging Environment
+  description: OpenEnv-style incident response environment for on-call diagnosis, mitigation, and recovery.
+  category: real-world-operations
