@@ -32,10 +32,11 @@ def health() -> dict[str, str]:
 
 
 @app.post("/reset", response_model=IncidentObservation)
-def reset_environment(request: ResetRequest) -> IncidentObservation:
+def reset_environment(request: ResetRequest | None = None) -> IncidentObservation:
     global environment
+    payload = request or ResetRequest()
     try:
-        environment = ProductionIncidentEnv(task_id=request.task_id, max_steps=request.max_steps)
+        environment = ProductionIncidentEnv(task_id=payload.task_id, max_steps=payload.max_steps)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return environment.reset()
