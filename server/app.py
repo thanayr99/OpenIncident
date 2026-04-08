@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -45,7 +47,8 @@ def get_state() -> IncidentObservation:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("server.app:app", host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("server.app:app", host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":

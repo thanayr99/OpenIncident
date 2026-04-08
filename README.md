@@ -139,7 +139,7 @@ python inference.py
 
 ```bash
 docker build -t production-incident-env .
-docker run -p 8000:7860 production-incident-env
+docker run -e PORT=7860 -p 7860:7860 production-incident-env
 ```
 
 ## Baseline Scores
