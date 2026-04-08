@@ -18,6 +18,14 @@ app = FastAPI(title="Production Incident Debugging Environment", version="1.0.0"
 environment = ProductionIncidentEnv()
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "name": "OpenIncident",
+        "status": "ok",
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
