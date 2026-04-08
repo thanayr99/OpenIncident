@@ -1,9 +1,10 @@
 ---
 title: OpenIncident
-emoji: 🚨
+emoji: "🚨"
 colorFrom: red
 colorTo: blue
 sdk: docker
+app_port: 7860
 pinned: false
 ---
 
@@ -138,7 +139,7 @@ python inference.py
 
 ```bash
 docker build -t production-incident-env .
-docker run -p 8000:8000 production-incident-env
+docker run -p 8000:7860 production-incident-env
 ```
 
 ## Baseline Scores
