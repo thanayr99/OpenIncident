@@ -1,6 +1,10 @@
 from server.environment import ProductionIncidentEnv
 
 
+def _strict_score(value: float) -> float:
+    return max(0.01, min(0.99, round(value, 4)))
+
+
 def grader_medium(environment: ProductionIncidentEnv) -> float:
     state = environment.state()
     score = 0.0
@@ -12,4 +16,4 @@ def grader_medium(environment: ProductionIncidentEnv) -> float:
         score += 0.1
     if "restart_service" not in environment.action_history:
         score += 0.1
-    return min(1.0, score)
+    return _strict_score(score)

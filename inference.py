@@ -16,6 +16,10 @@ TASKS = ["easy", "medium", "hard"]
 VALID_ACTIONS = {action_type.value for action_type in ActionType}
 
 
+def strict_score(value: float) -> float:
+    return max(0.01, min(0.99, round(value, 4)))
+
+
 def fallback_policy(task_name: str, step: int) -> tuple[str, str | None]:
     if task_name == "easy":
         plan = [
@@ -154,7 +158,7 @@ def main() -> None:
         rewards: List[float] = []
         success = False
         step_count = 0
-        final_score = 0.0
+        final_score = 0.01
 
         print(f"[START] task={task_name} env={BENCHMARK} model={MODEL_NAME}")
 
@@ -181,7 +185,7 @@ def main() -> None:
                 state = observation
                 rewards.append(reward)
                 success = state.current_status == "resolved"
-                final_score = reward
+                final_score = strict_score(reward)
                 error_value = info.get("last_action_error")
                 error_text = str(error_value) if error_value else "null"
                 action_str = action_type if content is None else f"{action_type}:{content}"
