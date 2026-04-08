@@ -1,3 +1,12 @@
+---
+title: OpenIncident
+emoji: 🚨
+colorFrom: red
+colorTo: blue
+sdk: docker
+pinned: false
+---
+
 # Production Incident Debugging Environment
 
 ## Project Description
