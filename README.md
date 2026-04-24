@@ -14,6 +14,7 @@ pinned: false
 
 - Hugging Face Space: https://huggingface.co/spaces/thanayr/OpenIncident
 - Minimal HF TRL notebook path: `colab/OpenIncidentX_HF_TRL_Minimal.ipynb`
+- Colab notebook link: https://colab.research.google.com/drive/1R4IrMr5nIKm7lZfbI08EP9ijkUgF7fxH?usp=sharing
 - RL baseline + training runner: `colab/run_openincident_hackathon.py`
 - HF TRL minimal trainer: `colab/run_openincident_hf_trl_minimal.py`
 - Final submission guide: `docs/HACKATHON_SUBMISSION_FINAL.md`
