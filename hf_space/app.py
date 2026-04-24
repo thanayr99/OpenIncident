@@ -207,7 +207,7 @@ with gr.Blocks(title="OpenIncident X", css=css) as demo:
             else:
                 gr.Markdown("Reward plot missing at `artifacts/colab_demo/medium_epsilon_rewards.png`.")
             gr.Markdown("### Best successful trajectory")
-            gr.Code(value=str(trajectory_actions), language="text")
+            gr.Code(value=str(trajectory_actions), language="json")
 
         with gr.TabItem("Reproducibility"):
             gr.Markdown(links_md)
