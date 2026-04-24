@@ -208,6 +208,15 @@ with gr.Blocks(title="OpenIncident X", css=css) as demo:
                 gr.Markdown("Reward plot missing at `artifacts/colab_demo/medium_epsilon_rewards.png`.")
             gr.Markdown("### Best successful trajectory")
             gr.Code(value=str(trajectory_actions), language="json")
+            if trl_summary:
+                gr.Markdown("### Second result: HF TRL training run")
+                trl_brief = {
+                    "train_loss": trl_summary.get("train_loss"),
+                    "train_runtime": trl_summary.get("train_runtime"),
+                    "train_samples": trl_summary.get("train_samples"),
+                    "model_id": trl_summary.get("model_id"),
+                }
+                gr.JSON(value=trl_brief, label="HF TRL Result Snapshot")
 
         with gr.TabItem("Reproducibility"):
             gr.Markdown(links_md)
