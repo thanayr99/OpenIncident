@@ -1,0 +1,11 @@
+{
+  "train_runtime": 33.4911,
+  "train_samples_per_second": 8.032,
+  "train_steps_per_second": 2.03,
+  "total_flos": 43497979932.0,
+  "train_loss": 10.820884760688333,
+  "train_samples": 269,
+  "model_id": "sshleifer/tiny-gpt2",
+  "dataset_path": "artifacts\\trl_minimal\\medium_stochastic_sft_dataset.jsonl",
+  "model_output_dir": "artifacts\\trl_minimal\\trained_model"
+}

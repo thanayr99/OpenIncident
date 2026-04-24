@@ -7,10 +7,13 @@ requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115.12",
   "openai>=2.30.0",
-  "openenv-core>=0.2.0",
+  "openenv-core==0.2.3",
+  "playwright>=1.52.0",
   "pydantic>=2.12.5",
   "pyyaml>=6.0.3",
   "requests>=2.31.0",
+  "sqlalchemy>=2.0.41",
+  "psycopg[binary]>=3.2.9",
   "uvicorn[standard]>=0.44.0",
 ]
 
@@ -20,3 +23,7 @@ server = "server.app:main"
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["server", "graders", "tasks"]
+py-modules = ["models", "client", "inference", "rl_training"]

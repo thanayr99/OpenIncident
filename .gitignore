@@ -1,2 +1,31 @@
 __pycache__/
 *.py[cod]
+frontend/node_modules/
+frontend/dist/
+*.egg-info/
+
+# Environment files
+.env
+.env.*
+!.env.backend.example
+frontend/.env
+frontend/.env.*
+
+# Local runtime state
+data/**
+temp/
+test-results/
+.pytest_tmp/
+
+# Generated artifacts (keep only hackathon evidence files)
+artifacts/**
+!artifacts/colab_demo/
+artifacts/colab_demo/**
+!artifacts/colab_demo/medium_epsilon_metrics.json
+!artifacts/colab_demo/medium_epsilon_rewards.csv
+!artifacts/colab_demo/medium_epsilon_rewards.png
+!artifacts/rl_test_cases_65.json
+!artifacts/trl_minimal/
+artifacts/trl_minimal/**
+!artifacts/trl_minimal/medium_stochastic_dataset_summary.json
+!artifacts/trl_minimal/medium_stochastic_trl_summary.json

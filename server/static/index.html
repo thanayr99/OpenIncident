@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenIncident X Command Center</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="command-shell">
+    <section class="hero command-card">
+      <div>
+        <p class="eyebrow">OpenIncident X</p>
+        <h1>Enterprise Reliability Command Center</h1>
+        <p class="lede">
+          Watch projects, validate user stories, detect failures, open incidents automatically,
+          and inspect what the agents know across checks, logs, code, and triage.
+        </p>
+      </div>
+      <div class="hero-status">
+        <span id="api-status-dot" class="status-dot"></span>
+        <div>
+          <p class="muted">API status</p>
+          <strong id="api-status-text">Checking...</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="overview-grid">
+      <article class="summary-card">
+        <span class="summary-label">Projects</span>
+        <strong id="summary-projects" class="summary-value">0</strong>
+      </article>
+      <article class="summary-card">
+        <span class="summary-label">Active Incidents</span>
+        <strong id="summary-incidents" class="summary-value">0</strong>
+      </article>
+      <article class="summary-card">
+        <span class="summary-label">Story Progress</span>
+        <strong id="summary-story-progress" class="summary-value">0%</strong>
+      </article>
+      <article class="summary-card">
+        <span class="summary-label">Latest Signal</span>
+        <strong id="summary-signal" class="summary-value">Waiting</strong>
+      </article>
+    </section>
+
+    <section class="command-layout">
+      <div class="command-column left-rail">
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Project Control</h2>
+            <p>Register a project and choose which app the command center should monitor.</p>
+          </div>
+          <form id="project-form" class="stack">
+            <label>
+              <span>Project name</span>
+              <input name="name" value="Local Demo" required>
+            </label>
+            <label>
+              <span>Base URL</span>
+              <input name="base_url" value="https://example.com" required>
+            </label>
+            <label>
+              <span>Repository URL</span>
+              <input name="repository_url" value="https://github.com/example/repo">
+            </label>
+            <label>
+              <span>Health path</span>
+              <input name="healthcheck_path" value="/health" required>
+            </label>
+            <button type="submit">Create project</button>
+          </form>
+          <div class="stack top-gap">
+            <label>
+              <span>Selected project</span>
+              <select id="project-select"></select>
+            </label>
+            <div class="inline-actions">
+              <button id="refresh-projects" type="button" class="secondary">Refresh</button>
+              <button id="enable-trigger" type="button" class="secondary">Enable auto incidents</button>
+            </div>
+          </div>
+          <p id="selected-project-summary" class="muted"></p>
+          <p id="project-message" class="feedback"></p>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Signals</h2>
+            <p>Run operational checks just like an on-call team would.</p>
+          </div>
+          <div class="stack">
+            <button id="run-health" type="button">Run health check</button>
+            <form id="browser-check-form" class="stack inset">
+              <h3 class="subhead">Browser validation</h3>
+              <label>
+                <span>Path</span>
+                <input name="path" value="/">
+              </label>
+              <label>
+                <span>Browser mode</span>
+                <select name="browser_mode">
+                  <option value="playwright">Playwright rendered check</option>
+                  <option value="http">Simple HTML fetch</option>
+                </select>
+              </label>
+              <label>
+                <span>Expected text</span>
+                <input name="expected_text" value="HourSafe AI">
+              </label>
+              <label>
+                <span>Expected selector (optional)</span>
+                <input name="expected_selector" placeholder="button[type='submit']">
+              </label>
+              <label>
+                <span>Label</span>
+                <input name="label" value="Homepage browser smoke">
+              </label>
+              <button type="submit">Run browser check</button>
+            </form>
+            <form id="api-check-form" class="stack inset">
+              <h3 class="subhead">API validation</h3>
+              <label>
+                <span>API path</span>
+                <input name="path" value="/api/profile">
+              </label>
+              <label>
+                <span>Method</span>
+                <input name="method" value="GET">
+              </label>
+              <label>
+                <span>Expected status</span>
+                <input name="expected_status" type="number" value="200">
+              </label>
+              <label>
+                <span>Label</span>
+                <input name="label" value="Profile API smoke">
+              </label>
+              <button type="submit">Run API check</button>
+            </form>
+          </div>
+          <p id="check-message" class="feedback"></p>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>User Stories</h2>
+            <p>Submit user stories so the planner can classify, execute, and report them.</p>
+          </div>
+          <form id="story-form" class="stack">
+            <label>
+              <span>Story title</span>
+              <input name="title" value="Profile API should return current user profile">
+            </label>
+            <label>
+              <span>Description</span>
+              <textarea name="description" rows="4">The /api/profile endpoint should return 200 and valid profile data.</textarea>
+            </label>
+            <label>
+              <span>Acceptance criteria</span>
+              <textarea name="acceptance_criteria" rows="3">GET /api/profile returns success</textarea>
+            </label>
+            <label>
+              <span>Tags</span>
+              <input name="tags" value="api,profile">
+            </label>
+            <label>
+              <span>Story path hint (optional)</span>
+              <input name="path" value="">
+            </label>
+            <label>
+              <span>Expected text hint (optional)</span>
+              <input name="expected_text" value="">
+            </label>
+            <label>
+              <span>API path hint (optional)</span>
+              <input name="api_path" value="/api/profile">
+            </label>
+            <button type="submit">Add story</button>
+          </form>
+          <p id="story-message" class="feedback"></p>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Runtime Logs</h2>
+            <p>Push logs into the project so triage and story execution can use runtime evidence.</p>
+          </div>
+          <form id="log-form" class="stack">
+            <label>
+              <span>Level</span>
+              <select name="level">
+                <option value="ERROR">ERROR</option>
+                <option value="WARNING">WARNING</option>
+                <option value="INFO">INFO</option>
+              </select>
+            </label>
+            <label>
+              <span>Source</span>
+              <input name="source" value="application">
+            </label>
+            <label>
+              <span>Message</span>
+              <textarea name="message" rows="4">Database connection timeout while serving /api/profile</textarea>
+            </label>
+            <button type="submit">Add log entry</button>
+          </form>
+          <p id="log-message" class="feedback"></p>
+        </section>
+      </div>
+
+      <div class="command-column center-stage">
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Project Signal Matrix</h2>
+            <p>This is the current operational picture for the selected project.</p>
+          </div>
+          <div id="signal-grid" class="signal-grid">
+            <div class="signal-card muted-card">Select a project to see health, validation, logs, and story progress.</div>
+          </div>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Latest Validation</h2>
+            <p>The newest check result appears here with the evidence the system observed.</p>
+          </div>
+          <div id="latest-check" class="data-panel empty-state">
+            Run a health, browser, or API check to see the latest validation summary.
+          </div>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>User Story Operations</h2>
+            <p>Stories are classified, tested, and linked to incidents when they fail.</p>
+          </div>
+          <div id="story-report" class="story-report-grid">
+            <div class="muted-card">No story report yet for this project.</div>
+          </div>
+          <div id="stories-list" class="story-list">
+            <p class="muted">No stories yet for this project.</p>
+          </div>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Active Incidents</h2>
+            <p>Open incidents from monitors and stories appear here until recovery is verified.</p>
+          </div>
+          <div id="runs-list" class="run-list">
+            <p class="muted">No active incidents yet.</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="command-column workspace">
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Investigation Workspace</h2>
+            <p>The selected incident or story context appears here for deeper inspection.</p>
+          </div>
+          <div id="run-state" class="data-panel empty-state">
+            Select an incident to see what OpenIncident knows so far.
+          </div>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>AI Triage</h2>
+            <p>This is the first diagnosis the system generates from the current evidence.</p>
+          </div>
+          <div id="triage-output" class="data-panel empty-state">
+            Select an incident and click "Triage run" to generate a diagnosis.
+          </div>
+        </section>
+
+        <section class="command-card">
+          <div class="section-head">
+            <h2>Selected Story Context</h2>
+            <p>Analyze a story, execute it, and inspect code context from the linked repository.</p>
+          </div>
+          <div id="story-detail" class="data-panel empty-state">
+            Select a story to inspect its analysis, execution result, and code context.
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

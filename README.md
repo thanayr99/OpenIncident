@@ -10,9 +10,28 @@ pinned: false
 
 # Production Incident Debugging Environment
 
+## Hackathon Quick Links
+
+- Hugging Face Space: https://huggingface.co/spaces/thanayr/OpenIncident
+- Minimal HF TRL notebook path: `colab/OpenIncidentX_HF_TRL_Minimal.ipynb`
+- RL baseline + training runner: `colab/run_openincident_hackathon.py`
+- HF TRL minimal trainer: `colab/run_openincident_hf_trl_minimal.py`
+- Final submission guide: `docs/HACKATHON_SUBMISSION_FINAL.md`
+- Final result summary: `docs/HACKATHON_RESULTS.md`
+- Demo video link (replace before final submission): `TODO_ADD_VIDEO_URL`
+- Hugging Face blog link (replace before final submission): `TODO_ADD_BLOG_URL`
+
 ## Project Description
 
 This project is an OpenEnv-style environment for evaluating AI agents on realistic production incident response. The agent behaves like an on-call backend engineer: it inspects evidence, identifies root cause, applies mitigation, restores service health, and adds follow-up monitoring.
+
+The local product-dev version also includes:
+
+- project registration for real websites
+- health/API/browser validation checks
+- automatic incident creation from failed checks
+- run triage summaries
+- Playwright-backed rendered browser checks
 
 ## Motivation
 
@@ -101,9 +120,125 @@ Rewards are clamped to `0.0-1.0`.
 ### Local
 
 ```bash
-pip install fastapi "uvicorn[standard]" pydantic openai requests pyyaml
+pip install fastapi "uvicorn[standard]" pydantic openai requests pyyaml playwright
+python -m playwright install chromium
 uvicorn server.app:app --host 0.0.0.0 --port 8000
 ```
+
+### Backend Storage
+
+The backend now uses a SQLite-backed state database by default:
+
+```text
+data/openincident.db
+```
+
+You can override it with:
+
+```bash
+OPENINCIDENT_DATABASE_URL=sqlite:///data/openincident.db
+```
+
+If you already have an older JSON store at `data/openincident_store.json`, the backend will import it into SQLite on first startup.
+
+Useful health endpoints:
+
+```text
+http://127.0.0.1:8000/health
+http://127.0.0.1:8000/system/status
+```
+
+Database inspection endpoints for authenticated operators:
+
+```text
+GET /system/database/overview
+GET /system/database/migrations
+GET /system/database/{table_name}?limit=50
+```
+
+Supported table names:
+
+- `app_state`
+- `auth_accounts`
+- `auth_tokens`
+- `projects`
+- `stories`
+- `runs`
+- `project_logs`
+- `project_metrics`
+- `project_events`
+
+### Neon / Postgres
+
+Neon Postgres is the intended database target for this project.
+The backend can also run with SQLite locally, but that is only a fallback for development.
+
+Set the connection string as:
+
+```bash
+OPENINCIDENT_DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST/DATABASE?sslmode=require&channel_binding=require
+```
+
+Once the Postgres driver is installed, the same backend state store will use Neon instead of the local SQLite file.
+
+For local development, you can also copy:
+
+```text
+.env.backend.example -> .env.backend
+```
+
+and place `OPENINCIDENT_DATABASE_URL` there. The backend will load `.env.backend` automatically on startup.
+
+### Dashboard
+
+Open the dashboard locally at:
+
+```text
+http://127.0.0.1:8000/dashboard
+```
+
+For real frontend checks, choose `Playwright rendered check` in the browser-check form.
+
+### React Command Center
+
+A separate React frontend now lives in `frontend/`.
+
+Run it in a second terminal:
+
+```bash
+cd frontend
+npm install
+copy .env.example .env
+npm run dev
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5173
+```
+
+By default the React app talks to the FastAPI backend at `http://127.0.0.1:8000`.
+
+If the login screen shows a backend fetch error, make sure the FastAPI server is running first and that `http://127.0.0.1:8000/health` returns a healthy response.
+
+### Build The React App Into FastAPI
+
+If you want the React command center served directly by FastAPI on `/dashboard`, build it first:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+After that, restart the backend and open:
+
+```text
+http://127.0.0.1:8000/dashboard
+```
+
+FastAPI will serve the built React app when `frontend/dist` exists. If it does not exist yet, it falls back to the legacy static dashboard.
 
 ### Smoke Test
 
@@ -120,6 +255,18 @@ print(client.step("apply_fix", content="add null guard to normalize_display_name
 print(client.step("resolve_incident"))
 '@ | python -
 ```
+
+### Real-World Signal Ingestion
+
+You can stream real logs and metrics into project datasets with:
+
+```powershell
+python scripts/realtime_ingest_bridge.py --help
+```
+
+Quick usage guide:
+
+- [docs/REALWORLD_DATA_INGESTION.md](C:/My%20Projects/AgenEnv/docs/REALWORLD_DATA_INGESTION.md)
 
 ### Baseline Inference
 
@@ -141,6 +288,8 @@ python inference.py
 docker build -t production-incident-env .
 docker run -p 8000:7860 production-incident-env
 ```
+
+The Docker image now builds the React frontend and serves it from FastAPI at `/dashboard`.
 
 ## Baseline Scores
 

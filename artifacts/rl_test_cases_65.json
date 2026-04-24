@@ -1,0 +1,1107 @@
+[
+  {
+    "id": "RL_TC_001",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 1",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_002",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 2",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_003",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 3",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_004",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 4",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_005",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 5",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_006",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 6",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_007",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 7",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_008",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 8",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_009",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 9",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_010",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 10",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_011",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 11",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_012",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 12",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_013",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 13",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_014",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 14",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_015",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 15",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_016",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 16",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_017",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 17",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_018",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 18",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_019",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 19",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_020",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 20",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_021",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 21",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_022",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 22",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_023",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 23",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_024",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 24",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_025",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 25",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_026",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 26",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_027",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 27",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_028",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 28",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_029",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 29",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_030",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 30",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_031",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 31",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_032",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 32",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_033",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 33",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_034",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 34",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_035",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 35",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_036",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 36",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_037",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 37",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_038",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 38",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_039",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 39",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_040",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 40",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_041",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 41",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_042",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 42",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_043",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 43",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_044",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 44",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_045",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 45",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_046",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 46",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_047",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 47",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_048",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 48",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_049",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 49",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_050",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 50",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_051",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 51",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_052",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 52",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_053",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 53",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_054",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 54",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_055",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 55",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_056",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 56",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_057",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 57",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_058",
+    "category": "diagnosis",
+    "task_id": "medium",
+    "title": "Diagnosis scenario 58",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_059",
+    "category": "mitigation",
+    "task_id": "easy",
+    "title": "Mitigation scenario 59",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_060",
+    "category": "mitigation",
+    "task_id": "medium",
+    "title": "Mitigation scenario 60",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_061",
+    "category": "closure",
+    "task_id": "easy",
+    "title": "Closure scenario 61",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_062",
+    "category": "closure",
+    "task_id": "medium",
+    "title": "Closure scenario 62",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_063",
+    "category": "adversarial",
+    "task_id": "hard",
+    "title": "Adversarial scenario 63",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_064",
+    "category": "long_horizon",
+    "task_id": "hard",
+    "title": "Long Horizon scenario 64",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  },
+  {
+    "id": "RL_TC_065",
+    "category": "diagnosis",
+    "task_id": "easy",
+    "title": "Diagnosis scenario 65",
+    "objective": "Maximize restoration and closure while minimizing unresolved endings.",
+    "pass_criteria": [
+      "Episode reaches resolved state OR demonstrates strong recovery trajectory.",
+      "No invalid early resolve action before restoration in successful runs.",
+      "Reward trend remains stable or improves over recent episodes."
+    ],
+    "required_actions": [
+      "inspect_metrics",
+      "apply_fix",
+      "resolve_incident"
+    ]
+  }
+]

@@ -4,7 +4,8 @@ WORKDIR /app
 
 COPY . /app
 
-RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic openai requests pyyaml
+RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic openai requests pyyaml playwright \
+    && python -m playwright install --with-deps chromium
 
 ENV PORT=7860
 

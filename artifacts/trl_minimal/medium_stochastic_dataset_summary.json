@@ -1,0 +1,11 @@
+{
+  "dataset_path": "artifacts\\trl_minimal\\medium_stochastic_sft_dataset.jsonl",
+  "records": 269,
+  "episodes_collected": 80,
+  "warmup_episodes": 20,
+  "successful_episodes": 21,
+  "failed_episodes_kept": 10,
+  "keep_failed_ratio": 0.15,
+  "task_id": "medium",
+  "env_mode": "stochastic"
+}
