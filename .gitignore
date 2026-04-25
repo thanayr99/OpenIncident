@@ -24,6 +24,16 @@ artifacts/colab_demo/**
 !artifacts/colab_demo/medium_epsilon_metrics.json
 !artifacts/colab_demo/medium_epsilon_rewards.csv
 !artifacts/colab_demo/medium_epsilon_rewards.png
+!artifacts/colab_demo_v1/
+artifacts/colab_demo_v1/**
+!artifacts/colab_demo_v1/medium_epsilon_metrics.json
+!artifacts/colab_demo_v1/medium_epsilon_rewards.csv
+!artifacts/colab_demo_v1/medium_epsilon_rewards.png
+!artifacts/colab_demo_v2_tuned4_full/
+artifacts/colab_demo_v2_tuned4_full/**
+!artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_metrics.json
+!artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_rewards.csv
+!artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_rewards.png
 !artifacts/rl_test_cases_65.json
 !artifacts/trl_minimal/
 artifacts/trl_minimal/**

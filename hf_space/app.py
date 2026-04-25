@@ -15,6 +15,7 @@ METRICS_PATH = PRIMARY_METRICS_PATH if PRIMARY_METRICS_PATH.exists() else LEGACY
 PRIMARY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo_v1" / "medium_epsilon_rewards.png"
 LEGACY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_rewards.png"
 PLOT_PATH = PRIMARY_PLOT_PATH if PRIMARY_PLOT_PATH.exists() else LEGACY_PLOT_PATH
+V2_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo_v2_tuned4_full" / "medium_epsilon_v2_rewards.png"
 DATASET_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_minimal" / "medium_stochastic_dataset_summary.json"
 TRL_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_minimal" / "medium_stochastic_trl_summary.json"
 GITHUB_URL = "https://github.com/thanayr99/OpenIncident"
@@ -220,6 +221,8 @@ with gr.Blocks(title="OpenIncident X", css=css) as demo:
                     "`artifacts/colab_demo_v1/medium_epsilon_rewards.png` "
                     "or `artifacts/colab_demo/medium_epsilon_rewards.png`."
                 )
+            if V2_PLOT_PATH.exists():
+                gr.Image(value=str(V2_PLOT_PATH), label="Reward Curve (v2 robustness)")
             gr.Markdown("### Best successful trajectory")
             gr.Code(value=str(trajectory_actions), language="json")
             if trl_summary:
@@ -234,6 +237,12 @@ with gr.Blocks(title="OpenIncident X", css=css) as demo:
 
         with gr.TabItem("Reproducibility"):
             gr.Markdown(links_md)
+            if PLOT_PATH.exists():
+                gr.Markdown("### Primary reward curve")
+                gr.Image(value=str(PLOT_PATH), label="v1 reward plot")
+            if V2_PLOT_PATH.exists():
+                gr.Markdown("### Harder-world reward curve")
+                gr.Image(value=str(V2_PLOT_PATH), label="v2 reward plot")
             if dataset_summary:
                 gr.Markdown("### HF TRL dataset summary")
                 gr.JSON(value=dataset_summary, label="Dataset Summary")

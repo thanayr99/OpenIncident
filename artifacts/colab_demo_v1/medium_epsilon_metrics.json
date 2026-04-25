@@ -1,0 +1,53 @@
+{
+  "task_id": "medium",
+  "policy": "epsilon",
+  "env_mode": "stochastic",
+  "env_profile": "v1",
+  "seed": 7,
+  "baseline": {
+    "label": "Random baseline",
+    "episodes": 5,
+    "avg_env_reward": 0.6276,
+    "avg_train_reward": -0.9324,
+    "avg_steps": 10.0,
+    "success_rate": 0.0,
+    "root_cause_rate": 0.2,
+    "restore_rate": 0.0,
+    "closure_gap_rate": 0.0,
+    "best_successful_trajectory": null
+  },
+  "trained": {
+    "label": "Epsilon-greedy training",
+    "episodes": 30,
+    "avg_env_reward": 1.0838,
+    "avg_train_reward": 1.5671,
+    "avg_steps": 9.6,
+    "success_rate": 0.2667,
+    "root_cause_rate": 0.6333,
+    "restore_rate": 0.3,
+    "closure_gap_rate": 0.0333,
+    "best_successful_trajectory": {
+      "episode": 11,
+      "steps": 10,
+      "actions": [
+        "identify_root_cause",
+        "inspect_traces",
+        "identify_root_cause",
+        "inspect_logs",
+        "identify_root_cause",
+        "apply_fix",
+        "apply_fix",
+        "apply_fix",
+        "inspect_deploys",
+        "resolve_incident"
+      ],
+      "env_reward": 4.3476,
+      "train_reward": 10.1976
+    }
+  },
+  "artifacts": {
+    "csv": "artifacts\\colab_demo_v1\\medium_epsilon_rewards.csv",
+    "plot": "artifacts\\colab_demo_v1\\medium_epsilon_rewards.png",
+    "metrics": "artifacts\\colab_demo_v1\\medium_epsilon_metrics.json"
+  }
+}
