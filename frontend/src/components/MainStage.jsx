@@ -103,6 +103,7 @@ export function MainStage({
   runHealthCheck,
   runBrowserSmoke,
   runApiSmoke,
+  runDiagnosticSweep,
   runPredeployGate,
   runMissionControl,
   triageFirstIncident,
@@ -311,7 +312,7 @@ export function MainStage({
   const setupConnected = Boolean(selectedProject?.repository_url && (productionUrl || apiBaseUrl));
   const environmentReady = Boolean(environmentSummary?.workspace_ready || frontendDiscovery?.routes?.length);
   const storyValidated = Boolean(storyReport?.completed_stories || storyReport?.failed_stories || storyReport?.blocked_stories);
-  const investigationReady = Boolean(activeRuns.length || logs.length || logSummary?.total_logs || recentEvidenceEvents.length);
+  const investigationReady = Boolean(activeRuns.length || logs.length || logSummary?.total_entries || recentEvidenceEvents.length);
   const gateReady = Boolean(predeployResult);
   const improvementReady = Boolean(hasTrainingData);
   const workflowSteps = [
@@ -350,9 +351,9 @@ export function MainStage({
       title: "Investigate failures",
       done: investigationReady,
       description: "Inspect logs, incidents, handoffs, and triage if failures appear.",
-      actionLabel: activeRuns.length ? "Triage incident" : "Run health check",
-      action: activeRuns.length ? triageFirstIncident : runHealthCheck,
-      busyKey: activeRuns.length ? "triage" : "health",
+      actionLabel: "Run diagnosis sweep",
+      action: runDiagnosticSweep,
+      busyKey: "diagnosticSweep",
     },
     {
       key: "gate",
@@ -613,6 +614,7 @@ export function MainStage({
               <button onClick={runHealthCheck} disabled={!selectedProject || busy.healthCheck} type="button">{busy.healthCheck ? "Checking..." : "Run health check"}</button>
               <button onClick={runBrowserSmoke} disabled={!selectedProject || busy.browserCheck} type="button">{busy.browserCheck ? "Rendering..." : "Run Playwright browser check"}</button>
               <button onClick={runApiSmoke} disabled={!selectedProject || busy.apiCheck} type="button">{busy.apiCheck ? "Calling..." : "Run API smoke check"}</button>
+              <button onClick={runDiagnosticSweep} disabled={!selectedProject || busy.diagnosticSweep} type="button">{busy.diagnosticSweep ? "Diagnosing..." : "Run diagnosis sweep"}</button>
               <button onClick={pullWorkspace} disabled={!selectedProject || busy.workspace} type="button">{busy.workspace ? "Pulling..." : "Pull GitHub workspace"}</button>
               <button onClick={discoverFrontend} disabled={!selectedProject || busy.discover} type="button">{busy.discover ? "Scanning..." : "Discover frontend routes"}</button>
               <button onClick={triageFirstIncident} disabled={!activeRuns.length || busy.triage} type="button">Triage active incident</button>

@@ -180,3 +180,78 @@ Use:
 - `GET /projects/{project_id}/observability-training-dataset`
 
 You should then see these signals in dashboard Evidence/Training views.
+
+## Splunk Connector (Production)
+
+OpenIncident now supports direct Splunk pull patterns through the log connector.
+
+Recommended Splunk export endpoint:
+
+- `https://<your-splunk-host>:8089/services/search/jobs/export`
+
+Recommended connector settings:
+
+- `method`: `POST`
+- `format`: `splunk_jsonl`
+- `payload_encoding`: `form`
+- `message_field`: `_raw`
+- `timestamp_field`: `_time`
+
+### Fast Path (Recommended)
+
+Use the helper script:
+
+```powershell
+python scripts/configure_splunk_connector.py `
+  --api-base-url http://127.0.0.1:8000 `
+  --email your@email.com `
+  --project-id YOUR_PROJECT_ID `
+  --splunk-url "https://YOUR_SPLUNK_HOST:8089/services/search/jobs/export" `
+  --splunk-token "YOUR_SPLUNK_TOKEN" `
+  --search "search index=main | head 100" `
+  --pull-limit 100
+```
+
+### API Example (PowerShell)
+
+```powershell
+$headers = @{ Authorization = "Bearer YOUR_OPENINCIDENT_TOKEN" }
+
+Invoke-RestMethod -Method Put -Uri "http://127.0.0.1:8000/projects/YOUR_PROJECT_ID/logs/connector" -Headers $headers -ContentType "application/json" -Body (@{
+  url = "https://YOUR_SPLUNK_HOST:8089/services/search/jobs/export"
+  method = "POST"
+  headers = @{
+    Authorization = "Splunk YOUR_SPLUNK_TOKEN"
+  }
+  query_params = @{}
+  payload = @{
+    search = "search index=main | head 100"
+    output_mode = "json"
+    earliest_time = "-15m"
+    latest_time = "now"
+    count = "100"
+  }
+  payload_encoding = "form"
+  enabled = $true
+  format = "splunk_jsonl"
+  entries_path = $null
+  level_field = "level"
+  source_field = "source"
+  message_field = "_raw"
+  timestamp_field = "_time"
+} | ConvertTo-Json -Depth 8)
+```
+
+Then pull logs:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/projects/YOUR_PROJECT_ID/logs/connector/pull" -Headers $headers -ContentType "application/json" -Body (@{
+  limit = 100
+} | ConvertTo-Json -Depth 4)
+```
+
+Then run in UI:
+
+1. Execution tab
+2. `Run diagnosis sweep`
+3. Review Evidence + agent handoff feed

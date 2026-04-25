@@ -47,6 +47,7 @@ def collect_sft_dataset(
     *,
     task_id: str,
     env_mode: str,
+    env_profile: str,
     episodes: int,
     warmup_episodes: int,
     keep_failed_ratio: float,
@@ -71,6 +72,7 @@ def collect_sft_dataset(
         env = ProductionIncidentEnv(
             task_id=task_id,
             stochastic_mode=env_mode,
+            dynamics_profile=env_profile,
             random_seed=seed + (episode_number * 19),
         )
         state = env.reset()
@@ -138,6 +140,7 @@ def collect_sft_dataset(
         "keep_failed_ratio": keep_failed_ratio,
         "task_id": task_id,
         "env_mode": env_mode,
+        "env_profile": env_profile,
     }
 
 
@@ -265,6 +268,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--task-id", default="medium", choices=["easy", "medium", "hard"])
     parser.add_argument("--env-mode", default="stochastic", choices=["deterministic", "stochastic"])
+    parser.add_argument("--env-profile", default="v1", choices=["v1", "v2"])
     parser.add_argument("--episodes", type=int, default=80, help="Episodes to collect after warmup.")
     parser.add_argument("--warmup-episodes", type=int, default=20, help="Episodes used to warm up the teacher policy.")
     parser.add_argument("--keep-failed-ratio", type=float, default=0.15, help="Fraction of failed episodes retained for diversity.")
@@ -285,14 +289,19 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset_path = output_dir / f"{args.task_id}_{args.env_mode}_sft_dataset.jsonl"
-    dataset_summary_path = output_dir / f"{args.task_id}_{args.env_mode}_dataset_summary.json"
-    train_summary_path = output_dir / f"{args.task_id}_{args.env_mode}_trl_summary.json"
+    profile_suffix = "" if args.env_profile == "v1" else f"_{args.env_profile}"
+    dataset_path = output_dir / f"{args.task_id}_{args.env_mode}{profile_suffix}_sft_dataset.jsonl"
+    dataset_summary_path = output_dir / f"{args.task_id}_{args.env_mode}{profile_suffix}_dataset_summary.json"
+    train_summary_path = output_dir / f"{args.task_id}_{args.env_mode}{profile_suffix}_trl_summary.json"
 
-    print("Collecting environment trajectories for SFT dataset...")
+    print(
+        f"Collecting environment trajectories for SFT dataset "
+        f"(mode={args.env_mode}, profile={args.env_profile})..."
+    )
     dataset_summary = collect_sft_dataset(
         task_id=args.task_id,
         env_mode=args.env_mode,
+        env_profile=args.env_profile,
         episodes=args.episodes,
         warmup_episodes=args.warmup_episodes,
         keep_failed_ratio=args.keep_failed_ratio,

@@ -1,6 +1,6 @@
 # OpenIncident X Hackathon Final Submission Guide
 
-Last updated: April 24, 2026
+Last updated: April 25, 2026
 
 ## 1) Non-Negotiable Requirement Check
 
@@ -9,7 +9,7 @@ Last updated: April 24, 2026
 - `HF TRL / Unsloth requirement`: minimal HF TRL path is now added:
   - script: `colab/run_openincident_hf_trl_minimal.py`
   - notebook: `colab/OpenIncidentX_HF_TRL_Minimal.ipynb`
-- `Reward evidence`: CSV + PNG + JSON metrics are generated under `artifacts/colab_demo/`.
+- `Reward evidence`: CSV + PNG + JSON metrics are generated under `artifacts/colab_demo_v1/` (official) and `artifacts/colab_demo_v2_tuned4_full/` (harder robustness).
 - `README-level explanation`: updated in `hf_space/README.md` and `docs/HACKATHON_RESULTS.md`.
 - `OpenEnv version pin`: `openenv-core==0.2.3` in `pyproject.toml`.
 
@@ -18,7 +18,13 @@ Last updated: April 24, 2026
 Main RL evidence run:
 
 ```powershell
-python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo_v1
+```
+
+Harder robustness RL run:
+
+```powershell
+python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v2 --output-dir artifacts/colab_demo_v2_tuned4_full
 ```
 
 Minimal HF TRL run:
@@ -36,22 +42,32 @@ python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stoc
 
 ## 3) Files To Show Judges
 
-- `artifacts/colab_demo/medium_epsilon_metrics.json`
-- `artifacts/colab_demo/medium_epsilon_rewards.png`
-- `artifacts/colab_demo/medium_epsilon_rewards.csv`
+- `artifacts/colab_demo_v1/medium_epsilon_metrics.json`
+- `artifacts/colab_demo_v1/medium_epsilon_rewards.png`
+- `artifacts/colab_demo_v1/medium_epsilon_rewards.csv`
+- `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_metrics.json`
+- `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_rewards.png`
 - `artifacts/trl_minimal/medium_stochastic_dataset_summary.json`
 - `artifacts/trl_minimal/medium_stochastic_trl_summary.json`
 - `artifacts/rl_test_cases_65.json`
 
 ## 4) Current Main Result (Stochastic Medium)
 
-From `artifacts/colab_demo/medium_epsilon_metrics.json`:
+From `artifacts/colab_demo_v1/medium_epsilon_metrics.json`:
 
 - baseline success rate: `0.00%`
 - trained success rate: `33.33%`
 - trained root cause rate: `63.33%`
 - trained restore rate: `43.33%`
 - trained closure gap rate: `10.00%`
+
+Harder profile cross-check (`artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_metrics.json`):
+
+- baseline success rate: `0.00%`
+- trained success rate: `27.50%`
+- trained root cause rate: `86.25%`
+- trained restore rate: `36.25%`
+- trained closure gap rate: `8.75%`
 
 ## 5) What To Say In Demo
 

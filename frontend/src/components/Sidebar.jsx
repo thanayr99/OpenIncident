@@ -21,6 +21,7 @@ export function Sidebar({
   const storyReport = summary?.story_report;
   const latestHealth = summary?.latest_health;
   const endpointCount = selectedProject?.endpoints?.length || (selectedProject?.base_url ? 1 : 0);
+  const editingExisting = Boolean(projectForm.project_id);
 
   return (
     <aside className="ox-left">
@@ -81,7 +82,9 @@ export function Sidebar({
           <input placeholder="Frontend URL" value={projectForm.frontend_url} onChange={(event) => setProjectForm((current) => ({ ...current, frontend_url: event.target.value, base_url: event.target.value || current.base_url }))} />
           <input placeholder="Backend API URL" value={projectForm.backend_url} onChange={(event) => setProjectForm((current) => ({ ...current, backend_url: event.target.value }))} />
           <input placeholder="Repository URL" value={projectForm.repository_url} onChange={(event) => setProjectForm((current) => ({ ...current, repository_url: event.target.value }))} />
-          <button disabled={busy.project} type="submit">{busy.project ? "Registering..." : "Create / update project"}</button>
+          <button disabled={busy.project} type="submit">
+            {busy.project ? "Saving..." : editingExisting ? "Save project changes" : "Create / update project"}
+          </button>
         </form>
       </section>
 

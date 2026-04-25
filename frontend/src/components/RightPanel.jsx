@@ -124,6 +124,7 @@ export function RightPanel({
   importBulkStories,
   ingestBulkLogs,
   saveLogConnector,
+  applySplunkConnectorTemplate,
   pullConnectedLogs,
   projectSummary,
   plannerSummary,
@@ -242,6 +243,7 @@ export function RightPanel({
             logConnectorForm={logConnectorForm}
             setLogConnectorForm={setLogConnectorForm}
             saveLogConnector={saveLogConnector}
+            applySplunkConnectorTemplate={applySplunkConnectorTemplate}
             pullConnectedLogs={pullConnectedLogs}
             projectSummary={projectSummary}
             stories={stories}

@@ -26,7 +26,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  overflow: hidden;
+  overflow: auto;
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
@@ -50,6 +50,8 @@ button:disabled {
 
 .ox-shell {
   min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   position: relative;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 360px;
@@ -96,7 +98,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 14px;
   height: 52px;
   padding: 0 22px;
   background: rgba(2, 4, 8, 0.86);
@@ -106,9 +108,21 @@ button:disabled {
 
 .ox-logo,
 .ox-top-right,
-.ox-topbar nav {
+.ox-topbar nav,
+.ox-top-center,
+.ox-top-project {
   display: flex;
   align-items: center;
+}
+
+.ox-top-center {
+  flex: 1;
+  justify-content: center;
+}
+
+.ox-top-project {
+  min-width: 160px;
+  justify-content: center;
 }
 
 .ox-logo {
@@ -167,10 +181,27 @@ button:disabled {
 }
 
 .ox-top-right {
-  gap: 14px;
+  gap: 12px;
   color: rgba(232, 237, 245, 0.44);
   font-family: var(--mono);
   font-size: 10px;
+}
+
+.topbar-back-button {
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 7px 10px;
+  text-transform: uppercase;
+}
+
+.topbar-back-button:hover {
+  border-color: rgba(0, 229, 255, 0.5);
+  background: rgba(0, 229, 255, 0.14);
 }
 
 .ox-project-pill {
@@ -247,14 +278,29 @@ button:disabled {
   height: calc(100vh - 52px);
   overflow: auto;
   padding: 14px;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 229, 255, 0.35) rgba(255, 255, 255, 0.02);
   pointer-events: auto;
 }
 
 .ox-left::-webkit-scrollbar,
 .ox-right::-webkit-scrollbar,
 .ox-main::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+  height: 8px;
+}
+
+.ox-left::-webkit-scrollbar-thumb,
+.ox-right::-webkit-scrollbar-thumb,
+.ox-main::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(0, 229, 255, 0.32);
+}
+
+.ox-left::-webkit-scrollbar-track,
+.ox-right::-webkit-scrollbar-track,
+.ox-main::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .ox-left {
@@ -270,11 +316,12 @@ button:disabled {
 .ox-main {
   height: calc(100vh - 52px);
   overflow: auto;
+  min-height: 0;
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .ox-panel,
@@ -479,6 +526,43 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.project-rail-actions button,
+.prototype-flow-row button,
+.ops-card button,
+.launch-quick-demo button,
+.launch-account button,
+.launch-existing button {
+  border: 1px solid rgba(0, 229, 255, 0.24);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.14), rgba(0, 229, 255, 0.06));
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 9px 12px;
+  transition: 160ms ease;
+}
+
+.project-rail-actions button:hover,
+.prototype-flow-row button:hover,
+.ops-card button:hover,
+.launch-quick-demo button:hover,
+.launch-account button:hover,
+.launch-existing button:hover {
+  border-color: rgba(0, 229, 255, 0.42);
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.2), rgba(0, 229, 255, 0.1));
+  color: #b7fbff;
+}
+
+.project-rail-actions button:disabled,
+.prototype-flow-row button:disabled,
+.ops-card button:disabled,
+.launch-quick-demo button:disabled,
+.launch-account button:disabled,
+.launch-existing button:disabled {
+  opacity: 0.52;
 }
 
 .project-rail-chip {
@@ -979,6 +1063,7 @@ button:disabled {
 
 .prototype-flow-row button {
   min-width: 148px;
+  text-align: center;
 }
 
 .ops-card header {
@@ -986,19 +1071,7 @@ button:disabled {
 }
 
 .ops-card button {
-  border: 1px solid var(--line2);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 9px 10px;
   text-align: left;
-}
-
-.ops-card button:hover {
-  border-color: rgba(0, 229, 255, 0.3);
-  color: var(--cyan);
 }
 
 .handoff-strip {
@@ -1651,6 +1724,81 @@ button:disabled {
   gap: 8px;
 }
 
+.connector-health {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.connector-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.connector-pill.healthy {
+  border-color: rgba(0, 255, 157, 0.45);
+  color: #7bffcf;
+  background: rgba(0, 255, 157, 0.08);
+}
+
+.connector-pill.degraded {
+  border-color: rgba(255, 99, 71, 0.45);
+  color: #ffad9a;
+  background: rgba(255, 99, 71, 0.08);
+}
+
+.connector-pill.disabled {
+  border-color: rgba(255, 179, 0, 0.4);
+  color: #ffd37a;
+  background: rgba(255, 179, 0, 0.08);
+}
+
+.connector-pill.not-configured,
+.connector-pill.configured {
+  border-color: rgba(0, 229, 255, 0.35);
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.08);
+}
+
+.connector-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.connector-health-grid div {
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(2, 8, 14, 0.65);
+}
+
+.connector-health-grid span {
+  display: block;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.connector-health-grid strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
 .connector-form input,
 .connector-form select {
   width: 100%;
@@ -1666,6 +1814,15 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.connector-row button {
+  margin-top: 0;
+  width: 100%;
+}
+
+.connector-form .workbench-textarea {
+  min-height: 92px;
 }
 
 .workbench-textarea {
@@ -1764,10 +1921,11 @@ button:disabled {
 .launch-shell {
   min-height: 100vh;
   display: grid;
-  place-items: center;
+  place-items: start center;
   padding: 28px;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 20% 20%, rgba(0, 229, 255, 0.16), transparent 24%),
     radial-gradient(circle at 80% 15%, rgba(124, 77, 255, 0.14), transparent 24%),
@@ -1796,6 +1954,8 @@ button:disabled {
   backdrop-filter: blur(22px);
   position: relative;
   z-index: 3;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
 }
 
 .launch-steps {
@@ -1836,15 +1996,38 @@ button:disabled {
   letter-spacing: -0.055em;
 }
 
-.launch-form {
-  margin-top: 22px;
-  grid-template-columns: 1fr 1fr;
+.launch-quick-demo {
+  margin-top: 14px;
+  margin-bottom: 8px;
+  padding: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.06);
+  display: grid;
+  gap: 6px;
 }
 
-.launch-form input:nth-child(3),
-.launch-form input:nth-child(4),
-.launch-form input:nth-child(5),
-.launch-form button {
+.launch-quick-demo button {
+  width: fit-content;
+}
+
+.launch-quick-demo button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.launch-quick-demo small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.launch-form {
+  margin-top: 22px;
+  grid-template-columns: 1fr;
+}
+
+.launch-template-strip {
   grid-column: 1 / -1;
 }
 
@@ -1882,14 +2065,7 @@ button:disabled {
 
 .launch-account button,
 .launch-existing button {
-  border: 1px solid var(--line2);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
   cursor: pointer;
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 9px 11px;
 }
 
 .launch-existing {
@@ -1915,6 +2091,24 @@ button:disabled {
 @media (max-width: 1180px) {
   body {
     overflow: auto;
+  }
+
+  .ox-topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 14px;
+    row-gap: 10px;
+  }
+
+  .ox-top-center,
+  .ox-top-project,
+  .ox-top-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ox-top-right {
+    flex-wrap: wrap;
   }
 
   .ox-shell {
@@ -1945,7 +2139,8 @@ button:disabled {
   .workbench-grid,
   .workbench-grid.compact,
   .connector-row,
-  .connector-actions {
+  .connector-actions,
+  .connector-health-grid {
     grid-template-columns: 1fr;
   }
 

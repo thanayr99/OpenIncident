@@ -70,6 +70,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--policy", default="epsilon", choices=["epsilon", "random", "hf"])
     parser.add_argument("--hf-model", default="distilgpt2")
     parser.add_argument("--env-mode", default="stochastic", choices=["deterministic", "stochastic"])
+    parser.add_argument("--env-profile", default="v1", choices=["v1", "v2"])
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--output-dir", default="artifacts/colab_demo")
@@ -83,22 +84,26 @@ def main() -> None:
 
     baseline_results = []
     if args.baseline_random > 0:
-        print(f"Running baseline on task '{args.task_id}' ({args.env_mode})...")
+        print(f"Running baseline on task '{args.task_id}' ({args.env_mode}, profile={args.env_profile})...")
         baseline_results = evaluate_random_policy(
             num_episodes=args.baseline_random,
             task_id=args.task_id,
             max_steps=args.max_steps,
             seed=args.seed,
             env_mode=args.env_mode,
+            env_profile=args.env_profile,
         )
         summarize(baseline_results, "Random baseline")
         print()
 
-    csv_path = output_dir / f"{args.task_id}_{args.policy}_rewards.csv"
-    plot_path = output_dir / f"{args.task_id}_{args.policy}_rewards.png"
-    metrics_path = output_dir / f"{args.task_id}_{args.policy}_metrics.json"
+    artifact_stem = f"{args.task_id}_{args.policy}"
+    if args.env_profile != "v1":
+        artifact_stem = f"{artifact_stem}_{args.env_profile}"
+    csv_path = output_dir / f"{artifact_stem}_rewards.csv"
+    plot_path = output_dir / f"{artifact_stem}_rewards.png"
+    metrics_path = output_dir / f"{artifact_stem}_metrics.json"
 
-    print(f"Running {args.policy} policy on task '{args.task_id}' ({args.env_mode})...")
+    print(f"Running {args.policy} policy on task '{args.task_id}' ({args.env_mode}, profile={args.env_profile})...")
     policy = make_policy(args.policy, args.seed, args.hf_model)
     rewards, trained_results, _policy = train_loop(
         num_episodes=args.episodes,
@@ -106,6 +111,7 @@ def main() -> None:
         max_steps=args.max_steps,
         seed=args.seed,
         env_mode=args.env_mode,
+        env_profile=args.env_profile,
         policy=policy,
         csv_path=csv_path,
         plot_path=plot_path,
@@ -118,6 +124,7 @@ def main() -> None:
         "task_id": args.task_id,
         "policy": args.policy,
         "env_mode": args.env_mode,
+        "env_profile": args.env_profile,
         "seed": args.seed,
         "baseline": build_summary(baseline_results, "Random baseline"),
         "trained": build_summary(trained_results, label),

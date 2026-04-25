@@ -384,6 +384,53 @@ class RunTriageSummary(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class SessionExecutionMode(str, Enum):
+    SIMULATION = "simulation"
+    RECOMMEND_ONLY = "recommend_only"
+    GUARDED = "guarded"
+
+
+class SessionExecutionPolicy(BaseModel):
+    mode: SessionExecutionMode = SessionExecutionMode.SIMULATION
+    allowed_actions: List[ActionType] = Field(default_factory=lambda: [action for action in ActionType])
+    approval_required_actions: List[ActionType] = Field(default_factory=list)
+    approval_token: Optional[str] = None
+    blocked_reward: float = -0.25
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @classmethod
+    def simulation_default(cls) -> "SessionExecutionPolicy":
+        return cls(
+            mode=SessionExecutionMode.SIMULATION,
+            allowed_actions=[action for action in ActionType],
+            approval_required_actions=[],
+            approval_token=None,
+        )
+
+    @classmethod
+    def production_guarded_default(cls) -> "SessionExecutionPolicy":
+        return cls(
+            mode=SessionExecutionMode.GUARDED,
+            allowed_actions=[action for action in ActionType],
+            approval_required_actions=[
+                ActionType.APPLY_FIX,
+                ActionType.ROLLBACK_DEPLOY,
+                ActionType.RESTART_SERVICE,
+                ActionType.SCALE_SERVICE,
+                ActionType.RESOLVE_INCIDENT,
+            ],
+            approval_token=None,
+        )
+
+
+class SessionExecutionPolicyUpdateRequest(BaseModel):
+    mode: Optional[SessionExecutionMode] = None
+    allowed_actions: Optional[List[ActionType]] = None
+    approval_required_actions: Optional[List[ActionType]] = None
+    approval_token: Optional[str] = None
+    blocked_reward: Optional[float] = None
+
+
 class SessionInfo(BaseModel):
     session_id: str
     task_id: str
@@ -425,6 +472,7 @@ class SessionResetResponse(BaseModel):
 class SessionStepRequest(BaseModel):
     session_id: str
     action: IncidentAction
+    approval_token: Optional[str] = None
 
 
 class SessionStepResult(BaseModel):
@@ -895,6 +943,9 @@ class ProjectLogConnectorConfig(BaseModel):
     url: str
     method: str = "GET"
     headers: Dict[str, str] = Field(default_factory=dict)
+    query_params: Dict[str, str] = Field(default_factory=dict)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    payload_encoding: str = "json"
     enabled: bool = True
     format: str = "text"
     entries_path: Optional[str] = None
@@ -904,12 +955,21 @@ class ProjectLogConnectorConfig(BaseModel):
     timestamp_field: str = "timestamp"
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_pulled_at: Optional[datetime] = None
+    last_pull_success: Optional[bool] = None
+    last_pull_summary: Optional[str] = None
+    last_pull_error: Optional[str] = None
+    last_fetched_entries: int = 0
+    last_imported_entries: int = 0
+    consecutive_failures: int = 0
 
 
 class ProjectLogConnectorRequest(BaseModel):
     url: str
     method: str = "GET"
     headers: Dict[str, str] = Field(default_factory=dict)
+    query_params: Dict[str, str] = Field(default_factory=dict)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    payload_encoding: str = "json"
     enabled: bool = True
     format: str = "text"
     entries_path: Optional[str] = None
@@ -942,6 +1002,29 @@ class ProjectLogSummary(BaseModel):
     warning_entries: int = 0
     top_signals: List[str] = Field(default_factory=list)
     latest_errors: List[str] = Field(default_factory=list)
+
+
+class ProjectDiagnosticIssue(BaseModel):
+    severity: str = "info"
+    category: str = "system"
+    title: str
+    detail: str
+
+
+class ProjectDiagnosticSweepResult(BaseModel):
+    project_id: str
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    health_snapshot: Optional[WebsiteHealthSnapshot] = None
+    browser_snapshot: Optional[ProjectValidationSnapshot] = None
+    api_snapshot: Optional[ProjectValidationSnapshot] = None
+    log_summary: Optional[ProjectLogSummary] = None
+    log_findings: List[str] = Field(default_factory=list)
+    open_incident_ids: List[str] = Field(default_factory=list)
+    triaged_run_ids: List[str] = Field(default_factory=list)
+    agent_handoffs_recorded: int = 0
+    issues: List[ProjectDiagnosticIssue] = Field(default_factory=list)
+    summary: str = ""
 
 
 class ProjectMetricPointInput(BaseModel):

@@ -1,0 +1,16 @@
+.git
+.github
+.pytest_cache
+.pytest_tmp
+test-results
+temp
+artifacts
+data
+frontend/node_modules
+frontend/dist
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+.DS_Store

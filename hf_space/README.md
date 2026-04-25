@@ -49,9 +49,9 @@ And the main trained agent for the hackathon is:
 
 - `Reliability Agent`
 
-## Current RL Result (Stochastic Medium)
+## Official RL Result (Stochastic Medium, profile=v1)
 
-From `artifacts/colab_demo/medium_epsilon_metrics.json`:
+From `artifacts/colab_demo_v1/medium_epsilon_metrics.json`:
 
 - baseline success rate: `0.00%`
 - trained success rate: `33.33%`
@@ -60,6 +60,16 @@ From `artifacts/colab_demo/medium_epsilon_metrics.json`:
 - trained root cause rate: `63.33%`
 - trained restore rate: `43.33%`
 - trained closure gap rate: `10.00%`
+
+## Harder Robustness Result (Stochastic Medium, profile=v2)
+
+From `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_metrics.json`:
+
+- baseline success rate: `0.00%`
+- trained success rate: `27.50%`
+- trained root cause rate: `86.25%`
+- trained restore rate: `36.25%`
+- trained closure gap rate: `8.75%`
 
 ## Important Honesty Note
 
@@ -88,7 +98,13 @@ python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stoc
 Recommended command:
 
 ```bash
-python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo_v1
+```
+
+Harder-profile command:
+
+```bash
+python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v2 --output-dir artifacts/colab_demo_v2_tuned4_full
 ```
 
 ## Dependency Pin

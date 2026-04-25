@@ -21,14 +21,14 @@ in Colab"), use:
 Or run the script directly:
 
 ```python
-!python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+!python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v1 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
 ```
 
 If running locally on Windows PowerShell, set UTF-8 mode first:
 
 ```powershell
 $env:PYTHONUTF8='1'
-python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v1 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
 ```
 
 ## Recommended Colab Cells
@@ -56,13 +56,13 @@ If you want the HuggingFace policy path too:
 ### 3. Run the hackathon-friendly wrapper
 
 ```python
-!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo
 ```
 
 If you are running locally in PowerShell or CMD instead of Colab, remove the `!`:
 
 ```powershell
-python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo
 ```
 
 ### 4. Inspect the saved metrics JSON
@@ -110,22 +110,33 @@ Use the metrics JSON and reward plot to explain:
 For the clearest current story, use:
 
 ```python
-!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo
 ```
 
 Local PowerShell equivalent:
 
 ```powershell
-python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo
 ```
 
 This is the most stable and believable training result in the current project.
 
+For the stricter environment upgrade path, run V2 side-by-side (without replacing V1 artifacts):
+
+```powershell
+python colab/run_openincident_hackathon.py --task-id medium --episodes 40 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v2 --output-dir artifacts/colab_demo_v2
+```
+
+```powershell
+$env:PYTHONUTF8='1'
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal_v2
+```
+
 To show contrast in your demo, run deterministic once and stochastic once:
 
 ```python
-!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode deterministic --output-dir artifacts/colab_deterministic
-!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_stochastic
+!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode deterministic --env-profile v1 --output-dir artifacts/colab_deterministic
+!python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_stochastic
 ```
 
 ## Optional HuggingFace Policy Run

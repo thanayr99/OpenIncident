@@ -49,6 +49,94 @@ function buildProjectEndpointInputs(form) {
   return endpoints;
 }
 
+function buildProjectFormFromProject(project) {
+  if (!project) return initialProjectForm;
+  const frontendEndpoint = getProjectEndpoint(project, "frontend");
+  const apiEndpoint = getProjectEndpoint(project, "api");
+  const frontendUrl = frontendEndpoint?.base_url || project.base_url || "";
+  const backendUrl = apiEndpoint?.base_url || "";
+  return {
+    project_id: project.project_id || "",
+    name: project.name || "",
+    base_url: frontendUrl,
+    frontend_url: frontendUrl,
+    backend_url: backendUrl,
+    repository_url: project.repository_url || "",
+    healthcheck_path: apiEndpoint?.healthcheck_path || project.healthcheck_path || "/health",
+    frontend_healthcheck_path: frontendEndpoint?.healthcheck_path || "/",
+    backend_healthcheck_path: apiEndpoint?.healthcheck_path || project.healthcheck_path || "/health",
+  };
+}
+
+function parseJsonObjectField(input, label) {
+  const trimmed = (input || "").trim();
+  if (!trimmed) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${label} must be valid JSON.`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object.`);
+  }
+  return parsed;
+}
+
+const DEMO_TEMPLATE = {
+  repositoryUrl: (import.meta.env.VITE_DEMO_REPOSITORY_URL || "https://github.com/example/repo").trim(),
+  frontendUrl: (import.meta.env.VITE_DEMO_FRONTEND_URL || "").trim(),
+  backendUrl: (import.meta.env.VITE_DEMO_BACKEND_URL || "").trim(),
+};
+
+const DEMO_LOG_SEEDS = [
+  { level: "ERROR", source: "api", message: "Profile endpoint timed out while waiting for postgres connection pool.", secondsAgo: 45 },
+  { level: "WARNING", source: "frontend", message: "Login route rendered with missing feature flag payload; retrying fetch.", secondsAgo: 65 },
+  { level: "ERROR", source: "reliability", message: "Health monitor marked deployment unreachable after three failed probes.", secondsAgo: 95 },
+  { level: "INFO", source: "planner", message: "Story 'User can login' routed to frontend_tester with priority high.", secondsAgo: 130 },
+  { level: "WARNING", source: "observability", message: "Latency spike detected: p95 crossed 420ms for service api-gateway.", secondsAgo: 155 },
+  { level: "INFO", source: "guardian", message: "Predeploy gate held until incident triage and API smoke checks complete.", secondsAgo: 185 },
+];
+
+function buildDemoLogs(projectId) {
+  const now = Date.now();
+  return DEMO_LOG_SEEDS.map((seed, index) => ({
+    log_id: `demo-log-${projectId || "default"}-${index + 1}`,
+    project_id: projectId || "demo-project",
+    timestamp: new Date(now - seed.secondsAgo * 1000).toISOString(),
+    level: seed.level,
+    source: seed.source,
+    message: seed.message,
+    context: {
+      demo_mode: true,
+      signal: "video_seed",
+    },
+  }));
+}
+
+function buildDemoLogSummary(projectId, entries) {
+  const totalEntries = entries.length;
+  const errorEntries = entries.filter((entry) => String(entry.level).toUpperCase() === "ERROR").length;
+  const warningEntries = entries.filter((entry) => String(entry.level).toUpperCase() === "WARNING").length;
+  return {
+    project_id: projectId || "demo-project",
+    generated_at: new Date().toISOString(),
+    total_entries: totalEntries,
+    error_entries: errorEntries,
+    warning_entries: warningEntries,
+    top_signals: ["timeout", "health", "latency", "login", "incident"],
+    latest_errors: entries
+      .filter((entry) => String(entry.level).toUpperCase() === "ERROR")
+      .slice(0, 3)
+      .map((entry) => `[${entry.level}] ${entry.message}`),
+  };
+}
+
+function hasRealLogSummary(summary) {
+  if (!summary) return false;
+  return (summary.total_entries || 0) > 0 || (summary.error_entries || 0) > 0 || (summary.warning_entries || 0) > 0;
+}
+
 export default function App() {
   const [apiHealth, setApiHealth] = useState("checking");
   const [clock, setClock] = useState(new Date());
@@ -71,6 +159,14 @@ export default function App() {
     method: "GET",
     format: "text",
     entries_path: "",
+    headers_json: "{}",
+    query_params_json: "{}",
+    payload_json: "{}",
+    payload_encoding: "json",
+    level_field: "level",
+    source_field: "source",
+    message_field: "message",
+    timestamp_field: "timestamp",
     enabled: true,
   });
   const [bulkStoryInput, setBulkStoryInput] = useState(`[
@@ -96,6 +192,7 @@ export default function App() {
   const [projectForm, setProjectForm] = useState(initialProjectForm);
   const [storyForm, setStoryForm] = useState(initialStoryForm);
   const [latestStory, setLatestStory] = useState(null);
+  const [instantDemo, setInstantDemo] = useState(null);
   const [message, setMessage] = useState("Ready.");
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [stageView, setStageView] = useState("overview");
@@ -113,16 +210,16 @@ export default function App() {
   function loadDemoProjectTemplate() {
     setProjectForm((current) => ({
       ...current,
-      name: current.name || "HouseSafe AI",
-      repository_url: current.repository_url || "https://github.com/example/housesafe-ai",
-      frontend_url: current.frontend_url || current.base_url || "https://house-safe-ai.vercel.app",
-      backend_url: current.backend_url || "https://house-safe-api.railway.app",
-      base_url: current.base_url || current.frontend_url || "https://house-safe-ai.vercel.app",
+      name: current.name || "OpenIncident Demo Project",
+      repository_url: current.repository_url || DEMO_TEMPLATE.repositoryUrl,
+      frontend_url: current.frontend_url || current.base_url || DEMO_TEMPLATE.frontendUrl,
+      backend_url: current.backend_url || DEMO_TEMPLATE.backendUrl,
+      base_url: current.base_url || current.frontend_url || DEMO_TEMPLATE.frontendUrl,
       frontend_healthcheck_path: current.frontend_healthcheck_path || "/",
       backend_healthcheck_path: current.backend_healthcheck_path || "/health",
       healthcheck_path: current.healthcheck_path || current.backend_healthcheck_path || "/health",
     }));
-    setMessage("Demo project template loaded. Replace the URLs with your real project values if needed.");
+    setMessage("Demo project template loaded. You can replace repository/frontend/backend URLs with your own deployment.");
   }
 
   function applyStoryTemplate(templateKey) {
@@ -162,6 +259,13 @@ export default function App() {
   const activeRuns = summary?.active_runs || [];
   const storyReport = summary?.story_report;
   const recentEvents = summary?.recent_events || [];
+  const demoLogs = useMemo(() => buildDemoLogs(selectedProject?.project_id), [selectedProject?.project_id]);
+  const demoLogSummary = useMemo(
+    () => buildDemoLogSummary(selectedProject?.project_id, demoLogs),
+    [selectedProject?.project_id, demoLogs],
+  );
+  const displayLogs = logs.length ? logs : demoLogs;
+  const displayLogSummary = hasRealLogSummary(logSummary) ? logSummary : demoLogSummary;
 
   const metricCards = useMemo(() => {
     const latest = summary?.metric_summary?.latest_values || {};
@@ -256,6 +360,14 @@ export default function App() {
       method: summaryData.log_connector?.method || current.method,
       format: summaryData.log_connector?.format || current.format,
       entries_path: summaryData.log_connector?.entries_path || current.entries_path,
+      headers_json: JSON.stringify(summaryData.log_connector?.headers || {}, null, 2),
+      query_params_json: JSON.stringify(summaryData.log_connector?.query_params || {}, null, 2),
+      payload_json: JSON.stringify(summaryData.log_connector?.payload || {}, null, 2),
+      payload_encoding: summaryData.log_connector?.payload_encoding || current.payload_encoding,
+      level_field: summaryData.log_connector?.level_field || current.level_field,
+      source_field: summaryData.log_connector?.source_field || current.source_field,
+      message_field: summaryData.log_connector?.message_field || current.message_field,
+      timestamp_field: summaryData.log_connector?.timestamp_field || current.timestamp_field,
       enabled: typeof summaryData.log_connector?.enabled === "boolean" ? summaryData.log_connector.enabled : current.enabled,
     }));
     setStories(storyItems);
@@ -302,7 +414,7 @@ export default function App() {
             base_url: projectApiEndpoint?.base_url || project.base_url,
             healthcheck_path: projectApiEndpoint?.healthcheck_path || project.healthcheck_path || "/health",
             expected_status: 200,
-            timeout_seconds: 10,
+            timeout_seconds: 30,
             enabled: true,
             headers: {},
           }),
@@ -310,6 +422,7 @@ export default function App() {
       }
       await loadProjects(project.project_id);
       await refreshSummary(project.project_id);
+      setProjectForm(buildProjectFormFromProject(project));
       setDashboardOpen(true);
       setStageView("overview");
       setMessage(`Project ${project.name} registered with ${project.endpoints?.length || 0} endpoint(s). Dashboard opened.`);
@@ -412,7 +525,7 @@ export default function App() {
           method: "GET",
           path: apiEndpoint?.healthcheck_path || selectedProject.healthcheck_path || "/health",
           expected_status: 200,
-          timeout_seconds: 10,
+          timeout_seconds: 30,
           headers: {},
           body: null,
           label: "Health API smoke",
@@ -420,6 +533,21 @@ export default function App() {
       });
       setLatestCheck(result);
       setMessage(`API check ${result.status}: ${result.error_message || result.target_url}`);
+      await refreshSummary(selectedProject.project_id);
+    });
+  }
+
+  async function runDiagnosticSweep() {
+    if (!selectedProject) return;
+    await runTask("diagnosticSweep", async () => {
+      const result = await apiRequest(`/projects/${selectedProject.project_id}/diagnostics/sweep`, {
+        method: "POST",
+      });
+      if (result.api_snapshot) setLatestCheck(result.api_snapshot);
+      else if (result.browser_snapshot) setLatestCheck(result.browser_snapshot);
+      else if (result.health_snapshot) setLatestCheck(result.health_snapshot);
+      const issueCount = Array.isArray(result.issues) ? result.issues.length : 0;
+      setMessage(`${result.summary}${issueCount ? ` (${issueCount} issue${issueCount === 1 ? "" : "s"} flagged)` : ""}`);
       await refreshSummary(selectedProject.project_id);
     });
   }
@@ -530,24 +658,61 @@ export default function App() {
   async function saveLogConnector() {
     if (!selectedProject) return;
     await runTask("logConnector", async () => {
+      const headers = parseJsonObjectField(logConnectorForm.headers_json, "Connector headers");
+      const queryParams = parseJsonObjectField(logConnectorForm.query_params_json, "Connector query params");
+      const payload = parseJsonObjectField(logConnectorForm.payload_json, "Connector payload");
       await apiRequest(`/projects/${selectedProject.project_id}/logs/connector`, {
         method: "PUT",
         body: JSON.stringify({
           url: logConnectorForm.url.trim(),
           method: logConnectorForm.method,
-          headers: {},
+          headers,
+          query_params: queryParams,
+          payload,
+          payload_encoding: logConnectorForm.payload_encoding,
           enabled: logConnectorForm.enabled,
           format: logConnectorForm.format,
           entries_path: logConnectorForm.entries_path.trim() || null,
-          level_field: "level",
-          source_field: "source",
-          message_field: "message",
-          timestamp_field: "timestamp",
+          level_field: logConnectorForm.level_field.trim() || "level",
+          source_field: logConnectorForm.source_field.trim() || "source",
+          message_field: logConnectorForm.message_field.trim() || "message",
+          timestamp_field: logConnectorForm.timestamp_field.trim() || "timestamp",
         }),
       });
       setMessage("Log connector saved.");
       await refreshSummary(selectedProject.project_id);
     });
+  }
+
+  function applySplunkConnectorTemplate() {
+    setLogConnectorForm((current) => ({
+      ...current,
+      method: "POST",
+      format: "splunk_jsonl",
+      payload_encoding: "form",
+      entries_path: "",
+      headers_json:
+        current.headers_json && current.headers_json.trim() !== "{}"
+          ? current.headers_json
+          : JSON.stringify({ Authorization: "Splunk YOUR_HEC_OR_API_TOKEN" }, null, 2),
+      query_params_json: "{}",
+      payload_json: JSON.stringify(
+        {
+          search: "search index=main | head 100",
+          output_mode: "json",
+          earliest_time: "-15m",
+          latest_time: "now",
+          count: "100",
+        },
+        null,
+        2,
+      ),
+      level_field: "level",
+      source_field: "source",
+      message_field: "_raw",
+      timestamp_field: "_time",
+    }));
+    setMessage("Splunk template loaded. Set URL to https://<splunk-host>:8089/services/search/jobs/export and replace token/query.");
   }
 
   async function pullConnectedLogs() {
@@ -705,7 +870,7 @@ export default function App() {
               method: "GET",
               path: (selectedApiEndpoint || selectedFrontendEndpoint)?.healthcheck_path || selectedProject.healthcheck_path || "/health",
               expected_status: 200,
-              timeout_seconds: 10,
+              timeout_seconds: 30,
               headers: {},
               body: null,
               label: "Health API smoke",
@@ -790,6 +955,61 @@ export default function App() {
     });
   }
 
+  async function runInstantAgentDemo() {
+    await runTask("instantDemo", async () => {
+      const resetResult = await apiRequest("/sessions/reset", {
+        method: "POST",
+        body: JSON.stringify({ task_id: "medium", max_steps: 10 }),
+      });
+
+      const actions = [
+        "inspect_metrics",
+        "inspect_logs",
+        "identify_root_cause",
+        "apply_fix",
+        "resolve_incident",
+      ];
+      const steps = [];
+      let done = false;
+      let finalObservation = resetResult.observation;
+
+      for (const actionType of actions) {
+        if (done) break;
+        const stepResult = await apiRequest("/sessions/step", {
+          method: "POST",
+          body: JSON.stringify({
+            session_id: resetResult.session.session_id,
+            action: { action_type: actionType },
+          }),
+        });
+        done = Boolean(stepResult.done);
+        finalObservation = stepResult.observation;
+        steps.push({
+          action: actionType,
+          reward: Number(stepResult.reward || 0),
+          done: Boolean(stepResult.done),
+          status: stepResult.observation?.current_status || "investigating",
+        });
+      }
+
+      const run = await apiRequest(`/sessions/${resetResult.session.session_id}/run`);
+      const totalReward = (run.reward_history || []).reduce((sum, value) => sum + Number(value || 0), 0);
+      const result = {
+        sessionId: resetResult.session.session_id,
+        runId: run.run_id,
+        taskId: run.task_id,
+        finalStatus: run.status,
+        totalReward: Number(totalReward.toFixed(3)),
+        steps,
+        finalObservation,
+      };
+      setInstantDemo(result);
+      setMessage(
+        `Instant demo complete: ${result.finalStatus}. Total reward ${result.totalReward}. Steps: ${result.steps.map((step) => step.action).join(" -> ")}.`,
+      );
+    });
+  }
+
   async function createAccount(event) {
     event.preventDefault();
     const email = accountForm.email.trim();
@@ -812,23 +1032,35 @@ export default function App() {
             skipAuth: true,
           },
         );
-      } catch {
-        await apiRequest(
-          "/auth/register",
-          {
-            method: "POST",
-            body: JSON.stringify({ name: name || email.split("@")[0], email, password, team }),
-            skipAuth: true,
-          },
-        );
-        loginResponse = await apiRequest(
-          "/auth/login",
-          {
-            method: "POST",
-            body: JSON.stringify({ email, password }),
-            skipAuth: true,
-          },
-        );
+      } catch (loginError) {
+        try {
+          await apiRequest(
+            "/auth/register",
+            {
+              method: "POST",
+              body: JSON.stringify({ name: name || email.split("@")[0], email, password, team }),
+              skipAuth: true,
+            },
+          );
+          loginResponse = await apiRequest(
+            "/auth/login",
+            {
+              method: "POST",
+              body: JSON.stringify({ email, password }),
+              skipAuth: true,
+            },
+          );
+        } catch (registerError) {
+          const registerMessage = registerError instanceof Error ? registerError.message.toLowerCase() : "";
+          const loginMessage = loginError instanceof Error ? loginError.message.toLowerCase() : "";
+          if (registerMessage.includes("already exists")) {
+            throw new Error("This email is already registered. Use the existing password to sign in.");
+          }
+          if (loginMessage.includes("invalid email or password")) {
+            throw new Error("Login failed. Check your password, or use a new email to auto-create an account.");
+          }
+          throw registerError;
+        }
       }
 
       setAuthToken(loginResponse.token);
@@ -870,9 +1102,20 @@ export default function App() {
       setMessage("Select a project first.");
       return;
     }
+    const project = projects.find((item) => item.project_id === selectedProjectId) || null;
+    if (project) {
+      setProjectForm(buildProjectFormFromProject(project));
+    }
     await refreshSummary(selectedProjectId);
     setDashboardOpen(true);
     setStageView("overview");
+    setMessage("Project opened. Use Back to setup anytime to switch context.");
+  }
+
+  function returnToSetup() {
+    setDashboardOpen(false);
+    setStageView("overview");
+    setMessage("Returned to setup. You can switch project, update URLs, or create a new one.");
   }
 
   useEffect(() => {
@@ -904,6 +1147,14 @@ export default function App() {
     }
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    if (!dashboardOpen || !selectedProject) return;
+    setProjectForm((current) => {
+      if (current.project_id === selectedProject.project_id) return current;
+      return buildProjectFormFromProject(selectedProject);
+    });
+  }, [dashboardOpen, selectedProject]);
+
   if (!account || !dashboardOpen || !selectedProject) {
     return (
       <ProjectLaunch
@@ -923,6 +1174,8 @@ export default function App() {
         busy={busy}
         message={message}
         loadDemoProjectTemplate={loadDemoProjectTemplate}
+        runInstantAgentDemo={runInstantAgentDemo}
+        instantDemo={instantDemo}
       />
     );
   }
@@ -941,6 +1194,7 @@ export default function App() {
         summary={summary}
         stageView={stageView}
         setStageView={setStageView}
+        onBackToSetup={returnToSetup}
       />
       <Sidebar
         agents={agents}
@@ -970,8 +1224,8 @@ export default function App() {
         trainingDatasets={trainingDatasets}
         stageView={stageView}
         setStageView={setStageView}
-        logs={logs}
-        logSummary={logSummary}
+        logs={displayLogs}
+        logSummary={displayLogSummary}
         recentEvents={recentEvents}
         frontendDiscovery={frontendDiscovery}
         latestCheck={latestCheck || summary?.latest_check}
@@ -983,11 +1237,14 @@ export default function App() {
         runHealthCheck={runHealthCheck}
         runBrowserSmoke={runBrowserSmoke}
         runApiSmoke={runApiSmoke}
+        runDiagnosticSweep={runDiagnosticSweep}
         runPredeployGate={runPredeployGate}
         runMissionControl={runMissionControl}
         triageFirstIncident={triageFirstIncident}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
+        runInstantAgentDemo={runInstantAgentDemo}
+        instantDemo={instantDemo}
       />
       <RightPanel
         selectedAgent={selectedAgent}
@@ -999,8 +1256,8 @@ export default function App() {
         frontendDiscovery={frontendDiscovery}
         latestStory={latestStory}
         stories={stories}
-        logs={logs}
-        logSummary={logSummary}
+        logs={displayLogs}
+        logSummary={displayLogSummary}
         logConnectorForm={logConnectorForm}
         setLogConnectorForm={setLogConnectorForm}
         bulkStoryInput={bulkStoryInput}
@@ -1010,6 +1267,7 @@ export default function App() {
         importBulkStories={importBulkStories}
         ingestBulkLogs={ingestBulkLogs}
         saveLogConnector={saveLogConnector}
+        applySplunkConnectorTemplate={applySplunkConnectorTemplate}
         pullConnectedLogs={pullConnectedLogs}
         projectSummary={summary}
         plannerSummary={plannerSummary}

@@ -37,6 +37,9 @@ def get_allowed_origins() -> list[str]:
 
 def get_database_url() -> str:
     database_url = os.getenv("OPENINCIDENT_DATABASE_URL", "sqlite:///data/openincident.db").strip()
+    placeholder_tokens = ("USERNAME", "PASSWORD", "HOST", "DATABASE")
+    if not database_url or any(token in database_url for token in placeholder_tokens):
+        return "sqlite:///data/openincident.db"
     if database_url.startswith("postgresql://"):
         return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
     if database_url.startswith("postgres://"):

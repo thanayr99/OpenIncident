@@ -19,6 +19,7 @@ from models import (
     AgentMaturity,
     AgentProfile,
     AgentRole,
+    IncidentAction,
     IncidentRun,
     PredeployValidationResult,
     GuardianDecisionRecord,
@@ -54,6 +55,8 @@ from models import (
     ProjectEndpointInput,
     ProjectEndpointBatchUpdateRequest,
     SessionInfo,
+    SessionExecutionPolicy,
+    SessionExecutionPolicyUpdateRequest,
     StoryStatus,
     UserStoryAnalysis,
     UserStoryBatchCreateRequest,
@@ -124,6 +127,8 @@ class InMemorySessionStore:
         self._environments: dict[str, ProductionIncidentEnv] = {}
         self._runs: dict[str, IncidentRun] = {}
         self._stories: dict[str, UserStoryRecord] = {}
+        self._project_execution_policies: dict[str, SessionExecutionPolicy] = {}
+        self._session_execution_policies: dict[str, SessionExecutionPolicy] = {}
         self._store_path.parent.mkdir(parents=True, exist_ok=True)
         self._load()
 
@@ -305,6 +310,14 @@ class InMemorySessionStore:
             story_id: UserStoryRecord.model_validate(story_payload)
             for story_id, story_payload in raw_payload.get("stories", {}).items()
         }
+        self._project_execution_policies = {
+            project_id: SessionExecutionPolicy.model_validate(policy_payload)
+            for project_id, policy_payload in raw_payload.get("project_execution_policies", {}).items()
+        }
+        self._session_execution_policies = {
+            session_id: SessionExecutionPolicy.model_validate(policy_payload)
+            for session_id, policy_payload in raw_payload.get("session_execution_policies", {}).items()
+        }
         self._environments = {
             session_id: ProductionIncidentEnv.from_snapshot(snapshot)
             for session_id, snapshot in raw_payload.get("environments", {}).items()
@@ -401,6 +414,14 @@ class InMemorySessionStore:
             "stories": {
                 story_id: story.model_dump(mode="json")
                 for story_id, story in self._stories.items()
+            },
+            "project_execution_policies": {
+                project_id: policy.model_dump(mode="json")
+                for project_id, policy in self._project_execution_policies.items()
+            },
+            "session_execution_policies": {
+                session_id: policy.model_dump(mode="json")
+                for session_id, policy in self._session_execution_policies.items()
             },
             "environments": {
                 session_id: environment.snapshot()
@@ -738,6 +759,10 @@ class InMemorySessionStore:
         )
         project = self._ensure_project_endpoint_defaults(project)
         self._projects[project.project_id] = project
+        self._project_execution_policies.setdefault(
+            project.project_id,
+            SessionExecutionPolicy.production_guarded_default(),
+        )
         self._write_project(project)
         self._project_agents[project.project_id] = self._build_default_agents(project.project_id)
         self._agent_coordination.setdefault(project.project_id, [])
@@ -1233,11 +1258,15 @@ class InMemorySessionStore:
 
     def set_project_log_connector(self, project_id: str, request: ProjectLogConnectorRequest) -> ProjectLogConnectorConfig:
         self.get_project(project_id)
+        previous = self._log_connectors.get(project_id)
         config = ProjectLogConnectorConfig(
             project_id=project_id,
             url=request.url.strip(),
             method=request.method.upper(),
             headers=request.headers,
+            query_params=request.query_params,
+            payload=request.payload,
+            payload_encoding=request.payload_encoding,
             enabled=request.enabled,
             format=request.format.lower(),
             entries_path=request.entries_path,
@@ -1245,6 +1274,13 @@ class InMemorySessionStore:
             source_field=request.source_field,
             message_field=request.message_field,
             timestamp_field=request.timestamp_field,
+            last_pulled_at=previous.last_pulled_at if previous else None,
+            last_pull_success=previous.last_pull_success if previous else None,
+            last_pull_summary=previous.last_pull_summary if previous else None,
+            last_pull_error=previous.last_pull_error if previous else None,
+            last_fetched_entries=previous.last_fetched_entries if previous else 0,
+            last_imported_entries=previous.last_imported_entries if previous else 0,
+            consecutive_failures=previous.consecutive_failures if previous else 0,
         )
         self._log_connectors[project_id] = config
         self._record_event(
@@ -1254,7 +1290,12 @@ class InMemorySessionStore:
             message=f"Remote log pull is now {'enabled' if config.enabled else 'disabled'} for {config.url}.",
             severity="info",
             source="logs",
-            metadata={"url": config.url, "format": config.format, "enabled": config.enabled},
+            metadata={
+                "url": config.url,
+                "format": config.format,
+                "enabled": config.enabled,
+                "payload_encoding": config.payload_encoding,
+            },
             persist=False,
         )
         self._save()
@@ -1270,32 +1311,75 @@ class InMemorySessionStore:
     def pull_project_logs_from_connector(self, project_id: str, limit: int = 100) -> ProjectLogConnectorPullResult:
         config = self.get_project_log_connector(project_id)
         if not config.enabled:
-            return ProjectLogConnectorPullResult(
+            result = ProjectLogConnectorPullResult(
                 project_id=project_id,
                 success=False,
                 summary="Log connector is disabled for this project.",
                 error_message="Connector disabled",
             )
+            config.last_pulled_at = result.pulled_at
+            config.last_pull_success = False
+            config.last_pull_summary = result.summary
+            config.last_pull_error = result.error_message
+            config.last_fetched_entries = 0
+            config.last_imported_entries = 0
+            config.consecutive_failures += 1
+            self._log_connectors[project_id] = config
+            self._record_event(
+                project_id,
+                event_type="log_connector_pull_blocked",
+                title="Remote log pull blocked",
+                message=result.summary,
+                severity="warning",
+                source="logs",
+                metadata={"url": config.url, "enabled": False},
+                persist=False,
+            )
+            self._save()
+            return result
 
         entries, result = pull_logs_from_connector(project_id, config, limit=limit)
+        created_entries: list[ProjectLogEntry] = []
+        imported_count = 0
         if entries:
             created_entries = create_log_entries(project_id, ProjectLogBatchRequest(entries=entries))
             self._project_logs.setdefault(project_id, []).extend(created_entries)
             self._write_logs(project_id, created_entries)
-            result.imported_entries = len(created_entries)
-            config.last_pulled_at = result.pulled_at
-            self._log_connectors[project_id] = config
-            self._record_event(
-                project_id,
-                event_type="log_connector_pull",
-                title="Remote logs pulled",
-                message=result.summary,
-                severity="warning" if any(entry.level.upper() in {"ERROR", "WARNING"} for entry in created_entries) else "info",
-                source="logs",
-                metadata={"count": len(created_entries), "url": config.url},
-                persist=False,
-            )
-            self._save()
+            imported_count = len(created_entries)
+            result.imported_entries = imported_count
+
+        config.last_pulled_at = result.pulled_at
+        config.last_pull_success = bool(result.success and not result.error_message)
+        config.last_pull_summary = result.summary
+        config.last_pull_error = result.error_message
+        config.last_fetched_entries = result.fetched_entries
+        config.last_imported_entries = result.imported_entries
+        config.consecutive_failures = 0 if config.last_pull_success else (config.consecutive_failures + 1)
+        self._log_connectors[project_id] = config
+
+        severity = "info"
+        if not result.success or result.error_message:
+            severity = "warning"
+        elif imported_count and any(entry.level.upper() in {"ERROR", "WARNING"} for entry in created_entries):
+            severity = "warning"
+
+        self._record_event(
+            project_id,
+            event_type="log_connector_pull",
+            title="Remote logs pulled" if config.last_pull_success else "Remote log pull failed",
+            message=result.summary,
+            severity=severity,
+            source="logs",
+            metadata={
+                "url": config.url,
+                "success": config.last_pull_success,
+                "fetched_entries": result.fetched_entries,
+                "imported_entries": result.imported_entries,
+                "error_message": result.error_message,
+            },
+            persist=False,
+        )
+        self._save()
         return result
 
     def add_project_metrics(self, project_id: str, request: ProjectMetricBatchRequest) -> list[ProjectMetricPoint]:
@@ -1689,6 +1773,199 @@ class InMemorySessionStore:
         self._save()
         return agent
 
+    def record_diagnostic_sweep_activity(
+        self,
+        project_id: str,
+        *,
+        health_status: str | None,
+        browser_status: str | None,
+        api_status: str | None,
+        log_summary: ProjectLogSummary | None,
+        open_incident_count: int,
+        triaged_run_count: int,
+        related_run_id: str | None = None,
+        related_session_id: str | None = None,
+    ) -> int:
+        self.get_project(project_id)
+        log_errors = log_summary.error_entries if log_summary else 0
+        log_warnings = log_summary.warning_entries if log_summary else 0
+        top_signals = ", ".join((log_summary.top_signals if log_summary else [])[:3]) or "none"
+
+        planner_note = (
+            "Planner initiated diagnostic sweep and coordinated frontend/API/database validation "
+            f"(health={health_status or 'unknown'}, browser={browser_status or 'unknown'}, api={api_status or 'unknown'})."
+        )
+        self._update_agent_activity(
+            project_id,
+            AgentRole.PLANNER,
+            success=True,
+            note=planner_note,
+        )
+
+        frontend_success = browser_status == "healthy"
+        self._update_agent_activity(
+            project_id,
+            AgentRole.FRONTEND_TESTER,
+            success=frontend_success,
+            note=f"Browser validation status: {browser_status or 'not_run'}.",
+        )
+
+        api_success = api_status == "healthy"
+        self._update_agent_activity(
+            project_id,
+            AgentRole.API_TESTER,
+            success=api_success,
+            note=f"API validation status: {api_status or 'not_run'}.",
+        )
+
+        database_success = log_errors == 0
+        self._update_agent_activity(
+            project_id,
+            AgentRole.DATABASE_ANALYST,
+            success=database_success,
+            note=f"Runtime log scan found {log_errors} error(s), {log_warnings} warning(s), signals={top_signals}.",
+        )
+
+        reliability_success = open_incident_count == 0
+        self._update_agent_activity(
+            project_id,
+            AgentRole.RELIABILITY_ANALYST,
+            success=reliability_success,
+            note=(
+                f"Sweep observed {open_incident_count} active incident(s) and triaged {triaged_run_count} run(s)."
+            ),
+            incident_triaged=triaged_run_count > 0,
+        )
+
+        guardian_success = reliability_success and health_status == "healthy"
+        self._update_agent_activity(
+            project_id,
+            AgentRole.TEST_ENV_GUARDIAN,
+            success=guardian_success,
+            note=(
+                "Release gate posture updated from diagnostics sweep "
+                f"(health={health_status or 'unknown'}, open_incidents={open_incident_count})."
+            ),
+        )
+
+        self._update_agent_activity(
+            project_id,
+            AgentRole.OVERSIGHT,
+            success=True,
+            note=(
+                "Oversight reviewed sweep evidence across planner/testing/reliability "
+                f"and marked {triaged_run_count} triage update(s)."
+            ),
+        )
+
+        handoff_count = 0
+
+        def _handoff(
+            *,
+            from_role: AgentRole,
+            to_role: AgentRole,
+            handoff_type: str,
+            summary: str,
+            metadata: dict | None = None,
+        ) -> None:
+            nonlocal handoff_count
+            self._record_agent_handoff(
+                project_id,
+                from_role=from_role,
+                to_role=to_role,
+                handoff_type=handoff_type,
+                summary=summary,
+                related_run_id=related_run_id,
+                related_session_id=related_session_id,
+                metadata=metadata or {},
+                persist=False,
+            )
+            handoff_count += 1
+
+        _handoff(
+            from_role=AgentRole.PLANNER,
+            to_role=AgentRole.FRONTEND_TESTER,
+            handoff_type="diagnostic_sweep",
+            summary="Planner requested frontend smoke validation during diagnostics sweep.",
+            metadata={"browser_status": browser_status},
+        )
+        _handoff(
+            from_role=AgentRole.PLANNER,
+            to_role=AgentRole.API_TESTER,
+            handoff_type="diagnostic_sweep",
+            summary="Planner requested API smoke validation during diagnostics sweep.",
+            metadata={"api_status": api_status},
+        )
+        _handoff(
+            from_role=AgentRole.PLANNER,
+            to_role=AgentRole.DATABASE_ANALYST,
+            handoff_type="diagnostic_sweep",
+            summary="Planner requested runtime log correlation for the active project.",
+            metadata={"log_errors": log_errors, "log_warnings": log_warnings},
+        )
+        _handoff(
+            from_role=AgentRole.FRONTEND_TESTER,
+            to_role=AgentRole.RELIABILITY_ANALYST,
+            handoff_type="diagnostic_result",
+            summary=f"Frontend tester reported browser status {browser_status or 'not_run'}.",
+        )
+        _handoff(
+            from_role=AgentRole.API_TESTER,
+            to_role=AgentRole.RELIABILITY_ANALYST,
+            handoff_type="diagnostic_result",
+            summary=f"API tester reported status {api_status or 'not_run'}.",
+        )
+        _handoff(
+            from_role=AgentRole.DATABASE_ANALYST,
+            to_role=AgentRole.RELIABILITY_ANALYST,
+            handoff_type="diagnostic_result",
+            summary=(
+                f"Database/log analyst reported {log_errors} error log(s) and "
+                f"{log_warnings} warning log(s); top signals: {top_signals}."
+            ),
+        )
+        _handoff(
+            from_role=AgentRole.RELIABILITY_ANALYST,
+            to_role=AgentRole.TEST_ENV_GUARDIAN,
+            handoff_type="diagnostic_gate_review",
+            summary=(
+                "Reliability sent incident posture to Guardian for release risk review "
+                f"(open incidents={open_incident_count})."
+            ),
+        )
+        _handoff(
+            from_role=AgentRole.TEST_ENV_GUARDIAN,
+            to_role=AgentRole.OVERSIGHT,
+            handoff_type="diagnostic_oversight",
+            summary="Guardian sent release posture and evidence snapshot to Oversight.",
+        )
+
+        self._record_agent_message(
+            project_id,
+            sender_role=AgentRole.RELIABILITY_ANALYST,
+            recipient_role=AgentRole.OVERSIGHT,
+            message_type="diagnostic_note",
+            content=(
+                f"Diagnostic sweep complete. Health={health_status or 'unknown'}, "
+                f"browser={browser_status or 'not_run'}, api={api_status or 'not_run'}, "
+                f"open_incidents={open_incident_count}, triaged_runs={triaged_run_count}."
+            ),
+            related_run_id=related_run_id,
+            related_session_id=related_session_id,
+            metadata={
+                "health_status": health_status,
+                "browser_status": browser_status,
+                "api_status": api_status,
+                "open_incident_count": open_incident_count,
+                "triaged_run_count": triaged_run_count,
+                "log_errors": log_errors,
+                "log_warnings": log_warnings,
+            },
+            persist=False,
+        )
+        self._save()
+        return handoff_count
+
     def list_agent_coordination(self, project_id: str, limit: int | None = None) -> list[AgentCoordinationEntry]:
         self.get_project(project_id)
         entries = sorted(self._agent_coordination.get(project_id, []), key=lambda item: item.timestamp, reverse=True)
@@ -2032,6 +2309,13 @@ class InMemorySessionStore:
             trigger_reason=trigger_reason,
         )
         environment = ProductionIncidentEnv(task_id=task_id, max_steps=max_steps)
+        if project is not None:
+            base_policy = self._project_execution_policies.get(project.project_id)
+            if base_policy is None:
+                base_policy = SessionExecutionPolicy.production_guarded_default()
+        else:
+            base_policy = SessionExecutionPolicy.simulation_default()
+        self._session_execution_policies[session_id] = base_policy.model_copy(deep=True)
         self._sessions[session_id] = session
         self._environments[session_id] = environment
         self._runs[session_id] = run
@@ -2051,6 +2335,121 @@ class InMemorySessionStore:
             return self._environments[session_id]
         except KeyError as exc:
             raise KeyError(f"Unknown session_id: {session_id}") from exc
+
+    def get_project_execution_policy(self, project_id: str) -> SessionExecutionPolicy:
+        self.get_project(project_id)
+        policy = self._project_execution_policies.get(project_id)
+        if policy is None:
+            policy = SessionExecutionPolicy.production_guarded_default()
+            self._project_execution_policies[project_id] = policy
+            self._save()
+        return policy
+
+    def set_project_execution_policy(
+        self,
+        project_id: str,
+        request: SessionExecutionPolicyUpdateRequest,
+    ) -> SessionExecutionPolicy:
+        current_policy = self.get_project_execution_policy(project_id)
+        updated_policy = self._apply_execution_policy_update(current_policy, request)
+        self._project_execution_policies[project_id] = updated_policy
+        for session_id, session in self._sessions.items():
+            if session.project and session.project.project_id == project_id:
+                self._session_execution_policies[session_id] = updated_policy.model_copy(deep=True)
+        self._save()
+        return updated_policy
+
+    def get_session_execution_policy(self, session_id: str) -> SessionExecutionPolicy:
+        self.get_session(session_id)
+        policy = self._session_execution_policies.get(session_id)
+        if policy is None:
+            run = self.get_run(session_id)
+            if run.project is not None:
+                policy = self.get_project_execution_policy(run.project.project_id).model_copy(deep=True)
+            else:
+                policy = SessionExecutionPolicy.simulation_default()
+            self._session_execution_policies[session_id] = policy
+            self._save()
+        return policy
+
+    def set_session_execution_policy(
+        self,
+        session_id: str,
+        request: SessionExecutionPolicyUpdateRequest,
+    ) -> SessionExecutionPolicy:
+        current_policy = self.get_session_execution_policy(session_id)
+        updated_policy = self._apply_execution_policy_update(current_policy, request)
+        self._session_execution_policies[session_id] = updated_policy
+        self._save()
+        return updated_policy
+
+    def evaluate_session_action(
+        self,
+        session_id: str,
+        action: IncidentAction,
+        approval_token: str | None = None,
+    ) -> tuple[bool, str | None, SessionExecutionPolicy]:
+        policy = self.get_session_execution_policy(session_id)
+        action_type = action.action_type
+
+        if policy.mode.value == "recommend_only":
+            return (
+                False,
+                "Session is in recommend_only mode. Action execution is disabled and responses are advisory only.",
+                policy,
+            )
+
+        if policy.mode.value == "guarded":
+            if policy.allowed_actions and action_type not in policy.allowed_actions:
+                return (
+                    False,
+                    f"Action '{action_type.value}' is not allowlisted for this session policy.",
+                    policy,
+                )
+
+            if action_type in policy.approval_required_actions:
+                configured_token = (policy.approval_token or "").strip()
+                provided_token = (approval_token or "").strip()
+                if not configured_token:
+                    return (
+                        False,
+                        f"Action '{action_type.value}' requires approval, but no approval token is configured.",
+                        policy,
+                    )
+                if configured_token != provided_token:
+                    return (
+                        False,
+                        f"Action '{action_type.value}' requires a valid approval token.",
+                        policy,
+                    )
+
+        return True, None, policy
+
+    def _apply_execution_policy_update(
+        self,
+        current_policy: SessionExecutionPolicy,
+        request: SessionExecutionPolicyUpdateRequest,
+    ) -> SessionExecutionPolicy:
+        updated = current_policy.model_copy(deep=True)
+        request_fields = request.model_fields_set
+
+        if "mode" in request_fields and request.mode is not None:
+            updated.mode = request.mode
+        if "allowed_actions" in request_fields and request.allowed_actions is not None:
+            updated.allowed_actions = list(dict.fromkeys(request.allowed_actions))
+        if "approval_required_actions" in request_fields and request.approval_required_actions is not None:
+            updated.approval_required_actions = list(dict.fromkeys(request.approval_required_actions))
+        if "approval_token" in request_fields:
+            updated.approval_token = (request.approval_token or "").strip() or None
+        if "blocked_reward" in request_fields and request.blocked_reward is not None:
+            updated.blocked_reward = float(request.blocked_reward)
+
+        if updated.allowed_actions:
+            updated.approval_required_actions = [
+                action for action in updated.approval_required_actions if action in updated.allowed_actions
+            ]
+        updated.updated_at = datetime.now(timezone.utc)
+        return updated
 
     def get_run(self, session_id: str) -> IncidentRun:
         try:
@@ -2226,12 +2625,24 @@ class InMemorySessionStore:
         project_id: str,
         signal_snapshot: WebsiteHealthSnapshot | ProjectValidationSnapshot,
     ) -> list[IncidentRun]:
+        return self.resolve_recovered_runs(project_id, signal_snapshot, include_story_sources=False)
+
+    def resolve_recovered_runs(
+        self,
+        project_id: str,
+        signal_snapshot: WebsiteHealthSnapshot | ProjectValidationSnapshot,
+        *,
+        include_story_sources: bool = True,
+    ) -> list[IncidentRun]:
         resolved_runs: list[IncidentRun] = []
         project = self.get_project(project_id)
         for session_id, run in self._runs.items():
             if not run.project or run.project.project_id != project_id:
                 continue
-            if run.source != "monitor":
+            if include_story_sources:
+                if run.source not in {"monitor", "story"}:
+                    continue
+            elif run.source != "monitor":
                 continue
             if run.status == "resolved":
                 continue
@@ -2259,7 +2670,10 @@ class InMemorySessionStore:
                 project_id,
                 event_type="incident_resolved",
                 title="Incident auto-resolved",
-                message=f"{signal_snapshot.check_type.capitalize()} recovered for {signal_snapshot.target_url}.",
+                message=(
+                    f"{signal_snapshot.check_type.capitalize()} recovered for {signal_snapshot.target_url} "
+                    f"(source={run.source})."
+                ),
                 severity="info",
                 source="incident",
                 related_run_id=run.run_id,

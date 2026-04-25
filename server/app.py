@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import os
 import subprocess
 from pathlib import Path
@@ -49,6 +50,8 @@ from models import (
     ProjectApiCheckRequest,
     ProjectBrowserCheckRequest,
     ProjectCreateRequest,
+    ProjectDiagnosticIssue,
+    ProjectDiagnosticSweepResult,
     ProjectApiTrainingDataset,
     ProjectEnvironmentSummary,
     ProjectFrontendTrainingDataset,
@@ -65,6 +68,8 @@ from models import (
     SessionResetRequest,
     SessionResetResponse,
     SessionInfo,
+    SessionExecutionPolicy,
+    SessionExecutionPolicyUpdateRequest,
     SessionStepRequest,
     SessionStepResult,
     StoryDomain,
@@ -140,6 +145,74 @@ def _resolve_project_endpoint(
         )
     except KeyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _log_issue(
+    issues: list[ProjectDiagnosticIssue],
+    *,
+    severity: str,
+    category: str,
+    title: str,
+    detail: str,
+) -> None:
+    issues.append(
+        ProjectDiagnosticIssue(
+            severity=severity,
+            category=category,
+            title=title,
+            detail=detail,
+        )
+    )
+
+
+def _build_log_findings(log_summary: ProjectLogSummary | None) -> tuple[list[str], list[ProjectDiagnosticIssue]]:
+    findings: list[str] = []
+    issues: list[ProjectDiagnosticIssue] = []
+    if log_summary is None:
+        _log_issue(
+            issues,
+            severity="warning",
+            category="logs",
+            title="Log summary unavailable",
+            detail="Runtime logs could not be summarized for this project.",
+        )
+        return findings, issues
+
+    if log_summary.total_entries == 0:
+        _log_issue(
+            issues,
+            severity="warning",
+            category="logs",
+            title="No runtime logs connected",
+            detail="Connect runtime logs to improve diagnosis confidence and root-cause evidence.",
+        )
+        return findings, issues
+
+    findings.append(f"Total log entries: {log_summary.total_entries}")
+    findings.append(f"Error entries: {log_summary.error_entries}")
+    findings.append(f"Warning entries: {log_summary.warning_entries}")
+    if log_summary.top_signals:
+        findings.append(f"Top signals: {', '.join(log_summary.top_signals[:5])}")
+    if log_summary.latest_errors:
+        findings.extend(log_summary.latest_errors[:3])
+
+    if log_summary.error_entries > 0:
+        _log_issue(
+            issues,
+            severity="error",
+            category="logs",
+            title="Runtime errors detected",
+            detail=f"Detected {log_summary.error_entries} error log entr{'y' if log_summary.error_entries == 1 else 'ies'}.",
+        )
+    if log_summary.warning_entries > 0:
+        _log_issue(
+            issues,
+            severity="warning",
+            category="logs",
+            title="Runtime warnings detected",
+            detail=f"Detected {log_summary.warning_entries} warning log entr{'y' if log_summary.warning_entries == 1 else 'ies'}.",
+        )
+    return findings, issues
 
 
 app = FastAPI(title="Production Incident Debugging Environment", version="1.0.0")
@@ -459,6 +532,31 @@ def update_project_endpoints(
         return session_store.set_project_endpoints(project_id, request)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/projects/{project_id}/execution-policy", response_model=SessionExecutionPolicy)
+def get_project_execution_policy(
+    project_id: str,
+    authorization: str | None = Header(default=None),
+) -> SessionExecutionPolicy:
+    _require_project_access(project_id, authorization)
+    try:
+        return session_store.get_project_execution_policy(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/projects/{project_id}/execution-policy", response_model=SessionExecutionPolicy)
+def set_project_execution_policy(
+    project_id: str,
+    request: SessionExecutionPolicyUpdateRequest,
+    authorization: str | None = Header(default=None),
+) -> SessionExecutionPolicy:
+    _require_project_access(project_id, authorization)
+    try:
+        return session_store.set_project_execution_policy(project_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/projects/{project_id}/logs", response_model=list[ProjectLogEntry])
@@ -1107,7 +1205,7 @@ def run_project_monitor_check(project_id: str, authorization: str | None = Heade
     snapshot = session_store.set_health_snapshot(snapshot)
     trigger = session_store.get_monitor_trigger(project_id)
     if snapshot.status == "healthy":
-        session_store.resolve_recovered_monitor_runs(project_id, snapshot)
+        session_store.resolve_recovered_runs(project_id, snapshot)
     elif trigger.enabled and trigger.auto_create_run and snapshot.status in {"unhealthy", "unreachable"}:
         reason = snapshot.error_message or f"Health check reported status {snapshot.status}"
         session_store.create_monitor_incident(
@@ -1180,7 +1278,7 @@ def run_project_api_check(
     snapshot = session_store.add_validation_snapshot(snapshot)
     trigger = session_store.get_monitor_trigger(project_id)
     if snapshot.status == "healthy":
-        session_store.resolve_recovered_monitor_runs(project_id, snapshot)
+        session_store.resolve_recovered_runs(project_id, snapshot)
     elif trigger.enabled and trigger.auto_create_run and snapshot.status in {"unhealthy", "unreachable"}:
         reason = snapshot.error_message or f"{snapshot.label} reported status {snapshot.status}"
         session_store.create_monitor_incident(
@@ -1251,7 +1349,7 @@ def run_project_browser_check(
     snapshot = session_store.add_validation_snapshot(snapshot)
     trigger = session_store.get_monitor_trigger(project_id)
     if snapshot.status == "healthy":
-        session_store.resolve_recovered_monitor_runs(project_id, snapshot)
+        session_store.resolve_recovered_runs(project_id, snapshot)
     elif trigger.enabled and trigger.auto_create_run and snapshot.status in {"unhealthy", "unreachable"}:
         reason = snapshot.error_message or f"{snapshot.label} reported status {snapshot.status}"
         session_store.create_monitor_incident(
@@ -1266,6 +1364,203 @@ def run_project_browser_check(
 def list_project_checks(project_id: str, authorization: str | None = Header(default=None)) -> list[ProjectValidationSnapshot]:
     _require_project_access(project_id, authorization)
     return session_store.list_validation_snapshots(project_id)
+
+
+@app.post("/projects/{project_id}/diagnostics/sweep", response_model=ProjectDiagnosticSweepResult)
+def run_project_diagnostics_sweep(
+    project_id: str,
+    authorization: str | None = Header(default=None),
+) -> ProjectDiagnosticSweepResult:
+    project, _ = _require_project_access(project_id, authorization)
+    started_at = datetime.now(timezone.utc)
+    issues: list[ProjectDiagnosticIssue] = []
+    health_snapshot: WebsiteHealthSnapshot | None = None
+    browser_snapshot: ProjectValidationSnapshot | None = None
+    api_snapshot: ProjectValidationSnapshot | None = None
+
+    try:
+        health_snapshot = run_project_monitor_check(project_id, authorization)
+    except HTTPException as exc:
+        _log_issue(
+            issues,
+            severity="warning",
+            category="health",
+            title="Health check skipped",
+            detail=str(exc.detail),
+        )
+    except Exception as exc:
+        _log_issue(
+            issues,
+            severity="error",
+            category="health",
+            title="Health check failed",
+            detail=str(exc),
+        )
+
+    frontend_endpoint = None
+    try:
+        frontend_endpoint = _resolve_project_endpoint(project, preferred_surface="frontend")
+    except HTTPException:
+        frontend_endpoint = None
+
+    if frontend_endpoint is not None or project.base_url:
+        browser_request = ProjectBrowserCheckRequest(
+            endpoint_id=frontend_endpoint.endpoint_id if frontend_endpoint else None,
+            path="/",
+            expected_text=None,
+            expected_selector=None,
+            timeout_seconds=15,
+            label="Diagnostic browser smoke",
+            browser_mode="playwright",
+            wait_until="networkidle",
+        )
+        try:
+            browser_snapshot = run_project_browser_check(project_id, browser_request, authorization)
+        except Exception as exc:
+            _log_issue(
+                issues,
+                severity="warning",
+                category="browser",
+                title="Playwright browser check failed; retrying HTTP mode",
+                detail=str(exc),
+            )
+            fallback_request = browser_request.model_copy(update={"browser_mode": "http"})
+            try:
+                browser_snapshot = run_project_browser_check(project_id, fallback_request, authorization)
+            except Exception as fallback_exc:
+                _log_issue(
+                    issues,
+                    severity="error",
+                    category="browser",
+                    title="Browser validation failed",
+                    detail=str(fallback_exc),
+                )
+    else:
+        _log_issue(
+            issues,
+            severity="warning",
+            category="browser",
+            title="Browser check skipped",
+            detail="No frontend endpoint is configured for this project.",
+        )
+
+    api_endpoint = None
+    try:
+        api_endpoint = _resolve_project_endpoint(project, preferred_surface="api")
+    except HTTPException:
+        api_endpoint = None
+
+    if api_endpoint is not None or project.base_url:
+        api_request = ProjectApiCheckRequest(
+            endpoint_id=api_endpoint.endpoint_id if api_endpoint else None,
+            method="GET",
+            path=(api_endpoint.healthcheck_path if api_endpoint else project.healthcheck_path) or "/health",
+            expected_status=200,
+            timeout_seconds=30,
+            headers={},
+            body=None,
+            label="Diagnostic API smoke",
+        )
+        try:
+            api_snapshot = run_project_api_check(project_id, api_request, authorization)
+        except Exception as exc:
+            _log_issue(
+                issues,
+                severity="error",
+                category="api",
+                title="API validation failed",
+                detail=str(exc),
+            )
+    else:
+        _log_issue(
+            issues,
+            severity="warning",
+            category="api",
+            title="API check skipped",
+            detail="No backend/API endpoint is configured for this project.",
+        )
+
+    try:
+        log_summary = session_store.get_project_log_summary(project_id)
+    except Exception as exc:
+        log_summary = None
+        _log_issue(
+            issues,
+            severity="warning",
+            category="logs",
+            title="Log summary failed",
+            detail=str(exc),
+        )
+    log_findings, log_issues = _build_log_findings(log_summary)
+    issues.extend(log_issues)
+
+    open_runs = [run for run in session_store.list_runs(project_id=project_id) if run.status != "resolved"]
+    triaged_run_ids: list[str] = []
+    for run in open_runs:
+        try:
+            triage_result = build_run_triage(session_store, run.session_id)
+            refreshed_run = session_store.get_run(run.session_id)
+            session_store.record_triage_summary(project_id, refreshed_run, triage_result)
+            session_store.record_triage_activity(project_id, triage_result.confidence, triage_result.summary)
+            triaged_run_ids.append(run.run_id)
+        except Exception as exc:
+            _log_issue(
+                issues,
+                severity="warning",
+                category="triage",
+                title=f"Triage failed for run {run.run_id[:8]}",
+                detail=str(exc),
+            )
+
+    first_open_run = open_runs[0] if open_runs else None
+    handoffs_recorded = session_store.record_diagnostic_sweep_activity(
+        project_id,
+        health_status=health_snapshot.status if health_snapshot else None,
+        browser_status=browser_snapshot.status if browser_snapshot else None,
+        api_status=api_snapshot.status if api_snapshot else None,
+        log_summary=log_summary,
+        open_incident_count=len(open_runs),
+        triaged_run_count=len(triaged_run_ids),
+        related_run_id=first_open_run.run_id if first_open_run else None,
+        related_session_id=first_open_run.session_id if first_open_run else None,
+    )
+
+    healthy_signals = sum(
+        1
+        for status in (
+            health_snapshot.status if health_snapshot else None,
+            browser_snapshot.status if browser_snapshot else None,
+            api_snapshot.status if api_snapshot else None,
+        )
+        if status == "healthy"
+    )
+    severity_counts = {
+        "error": sum(issue.severity == "error" for issue in issues),
+        "warning": sum(issue.severity == "warning" for issue in issues),
+    }
+    summary = (
+        f"Diagnostics sweep complete: healthy_signals={healthy_signals}/3, "
+        f"open_incidents={len(open_runs)}, triaged_runs={len(triaged_run_ids)}, "
+        f"log_errors={(log_summary.error_entries if log_summary else 0)}, "
+        f"warnings={severity_counts['warning']}, errors={severity_counts['error']}."
+    )
+
+    completed_at = datetime.now(timezone.utc)
+    return ProjectDiagnosticSweepResult(
+        project_id=project_id,
+        started_at=started_at,
+        completed_at=completed_at,
+        health_snapshot=health_snapshot,
+        browser_snapshot=browser_snapshot,
+        api_snapshot=api_snapshot,
+        log_summary=log_summary,
+        log_findings=log_findings,
+        open_incident_ids=[run.run_id for run in open_runs],
+        triaged_run_ids=triaged_run_ids,
+        agent_handoffs_recorded=handoffs_recorded,
+        issues=issues,
+        summary=summary,
+    )
 
 
 @app.get("/runs", response_model=list[IncidentRun])
@@ -1318,6 +1613,31 @@ def create_session(
     return SessionResetResponse(session=session, run=run, observation=observation)
 
 
+@app.get("/sessions/{session_id}/execution-policy", response_model=SessionExecutionPolicy)
+def get_session_execution_policy(
+    session_id: str,
+    authorization: str | None = Header(default=None),
+) -> SessionExecutionPolicy:
+    _require_session_access(session_id, authorization)
+    try:
+        return session_store.get_session_execution_policy(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/sessions/{session_id}/execution-policy", response_model=SessionExecutionPolicy)
+def set_session_execution_policy(
+    session_id: str,
+    request: SessionExecutionPolicyUpdateRequest,
+    authorization: str | None = Header(default=None),
+) -> SessionExecutionPolicy:
+    _require_session_access(session_id, authorization)
+    try:
+        return session_store.set_session_execution_policy(session_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/step", response_model=StepResult)
 def step_environment(action: IncidentAction) -> StepResult:
     observation, reward, done, info = environment.step(action)
@@ -1329,7 +1649,29 @@ def step_session(request: SessionStepRequest, authorization: str | None = Header
     _require_session_access(request.session_id, authorization)
     try:
         session_environment = session_store.get_environment(request.session_id)
-        observation, reward, done, info = session_environment.step(request.action)
+        can_execute, block_reason, policy = session_store.evaluate_session_action(
+            request.session_id,
+            request.action,
+            approval_token=request.approval_token,
+        )
+        if can_execute:
+            observation, reward, done, info = session_environment.step(request.action)
+            info["policy_mode"] = policy.mode.value
+        else:
+            current_observation = session_environment.state()
+            observation = current_observation.model_copy(
+                update={
+                    "last_action": request.action.action_type.value,
+                    "last_action_error": block_reason,
+                }
+            )
+            reward = policy.blocked_reward
+            done = False
+            info = {
+                "blocked": True,
+                "policy_mode": policy.mode.value,
+                "blocked_reason": block_reason,
+            }
         session = session_store.touch(request.session_id)
         run = session_store.record_step(request.session_id, reward=reward, observation=observation, done=done)
     except KeyError as exc:

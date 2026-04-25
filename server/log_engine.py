@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -117,14 +118,97 @@ def _normalize_json_logs(payload: Any, config: ProjectLogConnectorConfig, limit:
     return entries
 
 
-def pull_logs_from_connector(project_id: str, config: ProjectLogConnectorConfig, limit: int = 100) -> tuple[list[ProjectLogEntryInput], ProjectLogConnectorPullResult]:
-    try:
-        response = requests.request(
-            method=config.method.upper(),
-            url=config.url,
-            headers=config.headers,
-            timeout=15,
+def _normalize_splunk_jsonl_logs(text: str, config: ProjectLogConnectorConfig, limit: int) -> list[ProjectLogEntryInput]:
+    entries: list[ProjectLogEntryInput] = []
+    for line in text.splitlines():
+        raw_line = line.strip()
+        if not raw_line:
+            continue
+        try:
+            payload = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+
+        event = payload.get("result") if isinstance(payload, dict) and isinstance(payload.get("result"), dict) else payload
+        if not isinstance(event, dict):
+            continue
+
+        message = str(
+            event.get(config.message_field)
+            or event.get("_raw")
+            or event.get("message")
+            or ""
+        ).strip()
+        if not message:
+            continue
+
+        level_value = str(
+            event.get(config.level_field)
+            or event.get("level")
+            or event.get("severity")
+            or ""
+        ).strip()
+        if not level_value:
+            lowered = message.lower()
+            if any(token in lowered for token in ("error", "exception", "fail", "timeout")):
+                level_value = "ERROR"
+            elif any(token in lowered for token in ("warn", "deprecated")):
+                level_value = "WARNING"
+            else:
+                level_value = "INFO"
+
+        source = str(
+            event.get(config.source_field)
+            or event.get("source")
+            or event.get("host")
+            or "splunk"
+        ).strip() or "splunk"
+
+        timestamp_raw = event.get(config.timestamp_field) or event.get("_time")
+        timestamp = None
+        if isinstance(timestamp_raw, str) and timestamp_raw:
+            try:
+                timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+            except ValueError:
+                try:
+                    timestamp = datetime.fromtimestamp(float(timestamp_raw), tz=timezone.utc)
+                except ValueError:
+                    timestamp = None
+        elif isinstance(timestamp_raw, (int, float)):
+            timestamp = datetime.fromtimestamp(float(timestamp_raw), tz=timezone.utc)
+
+        entries.append(
+            ProjectLogEntryInput(
+                timestamp=timestamp,
+                level=level_value.upper(),
+                source=source,
+                message=message,
+                context=event,
+            )
         )
+        if len(entries) >= limit:
+            break
+
+    return entries
+
+
+def pull_logs_from_connector(project_id: str, config: ProjectLogConnectorConfig, limit: int = 100) -> tuple[list[ProjectLogEntryInput], ProjectLogConnectorPullResult]:
+    method = config.method.upper()
+    request_kwargs: dict[str, Any] = {
+        "method": method,
+        "url": config.url,
+        "headers": config.headers,
+        "params": config.query_params,
+        "timeout": 15,
+    }
+    if method not in {"GET", "HEAD"} and config.payload:
+        if config.payload_encoding.lower() == "form":
+            request_kwargs["data"] = config.payload
+        else:
+            request_kwargs["json"] = config.payload
+
+    try:
+        response = requests.request(**request_kwargs)
         response.raise_for_status()
     except requests.RequestException as exc:
         return [], ProjectLogConnectorPullResult(
@@ -134,7 +218,8 @@ def pull_logs_from_connector(project_id: str, config: ProjectLogConnectorConfig,
             error_message=str(exc),
         )
 
-    if config.format.lower() == "json":
+    format_kind = config.format.lower()
+    if format_kind == "json":
         try:
             payload = response.json()
         except ValueError as exc:
@@ -145,6 +230,8 @@ def pull_logs_from_connector(project_id: str, config: ProjectLogConnectorConfig,
                 error_message=str(exc),
             )
         inputs = _normalize_json_logs(payload, config, limit=limit)
+    elif format_kind == "splunk_jsonl":
+        inputs = _normalize_splunk_jsonl_logs(response.text, config, limit=limit)
     else:
         inputs = _normalize_text_logs(response.text, limit=limit)
 

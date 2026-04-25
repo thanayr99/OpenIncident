@@ -20,6 +20,9 @@ pinned: false
 - Final submission guide: `docs/HACKATHON_SUBMISSION_FINAL.md`
 - Final result summary: `docs/HACKATHON_RESULTS.md`
 - Final judge story README: `README_HACKATHON_FINAL.md`
+- Public deployment guide: `docs/DEPLOY_PUBLIC.md`
+- Command pack: `docs/RUN_COMMANDS.md`
+- Production app container: `Dockerfile.app`
 - Demo video link (replace before final submission): `TODO_ADD_VIDEO_URL`
 - Hugging Face blog link (replace before final submission): `TODO_ADD_BLOG_URL`
 

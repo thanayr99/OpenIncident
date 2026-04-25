@@ -16,15 +16,27 @@ class ProductionIncidentEnv:
         max_steps: int | None = None,
         *,
         stochastic_mode: str = "deterministic",
+        dynamics_profile: str = "v1",
         random_seed: int | None = None,
     ) -> None:
         if task_id not in TASK_REGISTRY:
             raise ValueError(f"Unsupported task_id: {task_id}")
         if stochastic_mode not in {"deterministic", "stochastic"}:
             raise ValueError("stochastic_mode must be either 'deterministic' or 'stochastic'")
+        if dynamics_profile not in {"v1", "v2"}:
+            raise ValueError("dynamics_profile must be either 'v1' or 'v2'")
         self.task = TASK_REGISTRY[task_id].model_copy(deep=True)
-        self.max_steps = max_steps or self.task.max_steps
+        base_max_steps = max_steps or self.task.max_steps
+        if max_steps is None and dynamics_profile == "v2":
+            if task_id == "hard":
+                base_max_steps += 3
+            elif task_id == "medium":
+                base_max_steps += 2
+            else:
+                base_max_steps += 1
+        self.max_steps = base_max_steps
         self.stochastic_mode = stochastic_mode
+        self.dynamics_profile = dynamics_profile
         self.random_seed = random_seed
         self._random = random.Random(random_seed)
         self.action_history: List[str] = []
@@ -42,6 +54,8 @@ class ProductionIncidentEnv:
         self._pending_recovery_verification = False
         self._fix_expected_to_restore = False
         self._fix_failure_rate = 0.0
+        self._verification_required_signals: set[str] = set()
+        self._verification_completed_signals: set[str] = set()
         self._state = self._build_initial_state()
 
     def _sample_episode_profile(self) -> None:
@@ -56,32 +70,75 @@ class ProductionIncidentEnv:
         self._pending_recovery_verification = False
         self._fix_expected_to_restore = False
         self._fix_failure_rate = 0.0
+        self._verification_required_signals = set()
+        self._verification_completed_signals = set()
 
         if self.stochastic_mode != "stochastic":
             return
 
+        if self.dynamics_profile == "v1":
+            evidence_pool = ["logs", "metrics", "traces", "deploys", "config", "code"]
+            evidence_count = min(2, len(evidence_pool))
+            sampled_evidence = set(self._random.sample(evidence_pool, k=evidence_count))
+            sampled_keywords = self._random.sample(
+                self.task.root_cause_keywords,
+                k=max(1, min(2, len(self.task.root_cause_keywords))),
+            )
+            sampled_valid_mitigation = self._random.sample(
+                self.task.valid_mitigations,
+                k=max(1, min(2, len(self.task.valid_mitigations))),
+            )
+            remaining_valid = [item for item in self.task.valid_mitigations if item not in sampled_valid_mitigation]
+
+            self._required_diagnosis_evidence = sampled_evidence
+            self._active_root_cause_keywords = sampled_keywords
+            self._active_valid_mitigations = sampled_valid_mitigation
+            self._active_partial_mitigations = list(self.task.partial_mitigations) + remaining_valid
+            self._active_harmful_actions = list(self.task.harmful_actions)
+            self._scenario_label = f"variant-{self._random.randint(1, 999):03d}"
+            self._minimum_inspections_for_diagnosis = 1
+            self._minimum_inspections_for_fix = 1
+            self._fix_failure_rate = 0.14
+            return
+
         evidence_pool = ["logs", "metrics", "traces", "deploys", "config", "code"]
-        evidence_count = min(2, len(evidence_pool))
+        evidence_count = min(len(evidence_pool), self._random.randint(2, 3))
         sampled_evidence = set(self._random.sample(evidence_pool, k=evidence_count))
+        keyword_sample_size = max(2, min(3, len(self.task.root_cause_keywords)))
+        mitigation_sample_size = max(2, min(3, len(self.task.valid_mitigations)))
         sampled_keywords = self._random.sample(
             self.task.root_cause_keywords,
-            k=max(1, min(2, len(self.task.root_cause_keywords))),
+            k=keyword_sample_size,
         )
         sampled_valid_mitigation = self._random.sample(
             self.task.valid_mitigations,
-            k=max(1, min(2, len(self.task.valid_mitigations))),
+            k=mitigation_sample_size,
         )
         remaining_valid = [item for item in self.task.valid_mitigations if item not in sampled_valid_mitigation]
+        partial_candidates = list(dict.fromkeys(list(self.task.partial_mitigations) + remaining_valid))
+        verification_pool = ["logs", "metrics", "traces", "deploys"]
+        verification_count = 2 if self.task.task_id == "hard" else 1
+        verification_count = min(verification_count, len(verification_pool))
 
         self._required_diagnosis_evidence = sampled_evidence
         self._active_root_cause_keywords = sampled_keywords
         self._active_valid_mitigations = sampled_valid_mitigation
-        self._active_partial_mitigations = list(self.task.partial_mitigations) + remaining_valid
+        self._active_partial_mitigations = partial_candidates
         self._active_harmful_actions = list(self.task.harmful_actions)
-        self._scenario_label = f"variant-{self._random.randint(1, 999):03d}"
-        self._minimum_inspections_for_diagnosis = 1
-        self._minimum_inspections_for_fix = 1
-        self._fix_failure_rate = 0.14
+        self._scenario_label = f"v2-{self.task.task_id}-{self._random.randint(100, 999)}"
+        if self.task.task_id == "hard":
+            self._minimum_inspections_for_diagnosis = 2
+            self._minimum_inspections_for_fix = 2
+            self._fix_failure_rate = 0.20
+        elif self.task.task_id == "medium":
+            self._minimum_inspections_for_diagnosis = 2
+            self._minimum_inspections_for_fix = 2
+            self._fix_failure_rate = 0.15
+        else:
+            self._minimum_inspections_for_diagnosis = 1
+            self._minimum_inspections_for_fix = 1
+            self._fix_failure_rate = 0.10
+        self._verification_required_signals = set(self._random.sample(verification_pool, k=verification_count))
 
     def _apply_initial_noise(self, state: IncidentObservation) -> None:
         if self.stochastic_mode != "stochastic":
@@ -97,13 +154,33 @@ class ProductionIncidentEnv:
                 + ", ".join(sorted(self._required_diagnosis_evidence))
                 + " before diagnosis is considered reliable."
             )
+        if self.dynamics_profile == "v2":
+            state.investigation_notes.append(
+                "V2 workflow enforced: inspect -> diagnose -> fix -> verify -> resolve."
+            )
 
     def _inspection_count(self) -> int:
         return sum(1 for revealed in self._revealed.values() if revealed)
 
+    def _current_action_streak(self) -> tuple[str | None, int]:
+        if not self.action_history:
+            return None, 0
+        last = self.action_history[-1]
+        streak = 0
+        for action_name in reversed(self.action_history):
+            if action_name != last:
+                break
+            streak += 1
+        return last, streak
+
     def _has_required_diagnosis_evidence(self) -> bool:
         if not self._required_diagnosis_evidence:
             return True
+        if self.dynamics_profile == "v2":
+            required_count = len(self._required_diagnosis_evidence)
+            covered_count = sum(1 for kind in self._required_diagnosis_evidence if self._revealed.get(kind, False))
+            threshold = max(1, required_count // 2)
+            return covered_count >= threshold
         return any(self._revealed.get(kind, False) for kind in self._required_diagnosis_evidence)
 
     def _build_initial_state(self) -> IncidentObservation:
@@ -176,6 +253,8 @@ class ProductionIncidentEnv:
         self._pending_recovery_verification = False
         self._fix_expected_to_restore = False
         self._fix_failure_rate = 0.0
+        self._verification_required_signals = set()
+        self._verification_completed_signals = set()
         self._revealed = {
             "logs": False,
             "metrics": False,
@@ -322,6 +401,7 @@ class ProductionIncidentEnv:
             task_id=snapshot["task_id"],
             max_steps=snapshot.get("max_steps"),
             stochastic_mode=snapshot.get("stochastic_mode", "deterministic"),
+            dynamics_profile=snapshot.get("dynamics_profile", "v1"),
             random_seed=snapshot.get("random_seed"),
         )
         env.action_history = list(snapshot.get("action_history", []))
@@ -343,6 +423,8 @@ class ProductionIncidentEnv:
         )
         env._fix_expected_to_restore = bool(snapshot.get("fix_expected_to_restore", env._fix_expected_to_restore))
         env._fix_failure_rate = float(snapshot.get("fix_failure_rate", env._fix_failure_rate))
+        env._verification_required_signals = set(snapshot.get("verification_required_signals", []))
+        env._verification_completed_signals = set(snapshot.get("verification_completed_signals", []))
         env._state = IncidentObservation.model_validate(snapshot["state"])
         return env
 
@@ -354,6 +436,7 @@ class ProductionIncidentEnv:
             "task_id": self.task.task_id,
             "max_steps": self.max_steps,
             "stochastic_mode": self.stochastic_mode,
+            "dynamics_profile": self.dynamics_profile,
             "random_seed": self.random_seed,
             "action_history": list(self.action_history),
             "revealed": deepcopy(self._revealed),
@@ -370,6 +453,8 @@ class ProductionIncidentEnv:
             "pending_recovery_verification": self._pending_recovery_verification,
             "fix_expected_to_restore": self._fix_expected_to_restore,
             "fix_failure_rate": self._fix_failure_rate,
+            "verification_required_signals": sorted(self._verification_required_signals),
+            "verification_completed_signals": sorted(self._verification_completed_signals),
             "state": self._state.model_dump(mode="json"),
         }
 
@@ -423,6 +508,22 @@ class ProductionIncidentEnv:
             return 0.0
         if evidence_kind not in {"logs", "metrics", "traces", "deploys"}:
             return 0.0
+
+        if self.dynamics_profile == "v2" and self._verification_required_signals:
+            if evidence_kind in self._verification_completed_signals:
+                self._state.last_action_error = f"{evidence_kind} already used for recovery verification"
+                self._bump_reliability(-2)
+                return -0.03
+
+            self._verification_completed_signals.add(evidence_kind)
+            remaining = self._verification_required_signals - self._verification_completed_signals
+            if remaining:
+                self._add_note(
+                    "Recovery verification progress: remaining signals "
+                    + ", ".join(sorted(remaining))
+                )
+                self._sync_checks()
+                return 0.04 if self._fix_expected_to_restore else -0.04
 
         self._pending_recovery_verification = False
         if self._fix_expected_to_restore:
@@ -512,6 +613,10 @@ class ProductionIncidentEnv:
         else:
             reward = -0.005
 
+        if self.dynamics_profile == "v2" and not was_revealed and kind in self._required_diagnosis_evidence:
+            reward += 0.02
+            self._add_note(f"Required diagnosis signal captured from {kind}.")
+
         action_result = f"revealed_{kind}" if not was_revealed else f"rechecked_{kind}"
         return reward + verification_reward, {"action_result": action_result}
 
@@ -521,8 +626,11 @@ class ProductionIncidentEnv:
                 self._state.suspected_root_cause = content
                 self._state.last_action_error = "Diagnosis attempted before collecting enough evidence"
                 self._bump_reliability(-6)
+                if self.dynamics_profile == "v2":
+                    self._add_note("Next step: inspect logs/metrics/traces before diagnosis.")
                 self._sync_checks()
-                return -0.16, {"action_result": "diagnosis_insufficient_evidence"}
+                penalty = -0.12 if self.dynamics_profile == "v2" else -0.16
+                return penalty, {"action_result": "diagnosis_insufficient_evidence"}
             if not self._has_required_diagnosis_evidence():
                 self._state.suspected_root_cause = content
                 self._state.last_action_error = (
@@ -530,8 +638,14 @@ class ProductionIncidentEnv:
                     + ", ".join(sorted(self._required_diagnosis_evidence))
                 )
                 self._bump_reliability(-6)
+                if self.dynamics_profile == "v2":
+                    self._add_note(
+                        "Next step: cover required diagnosis signals: "
+                        + ", ".join(sorted(self._required_diagnosis_evidence))
+                    )
                 self._sync_checks()
-                return -0.14, {"action_result": "diagnosis_missing_required_signals"}
+                penalty = -0.10 if self.dynamics_profile == "v2" else -0.14
+                return penalty, {"action_result": "diagnosis_missing_required_signals"}
 
         if self._matches_any(content, self._active_root_cause_keywords):
             self._state.suspected_root_cause = content
@@ -605,13 +719,19 @@ class ProductionIncidentEnv:
         if self.stochastic_mode == "stochastic" and not self._state.root_cause_confirmed:
             self._state.last_action_error = "Mitigation attempted before confirming root cause"
             self._bump_reliability(-8)
+            if self.dynamics_profile == "v2":
+                self._add_note("Next step: confirm root cause before applying fix.")
             self._sync_checks()
-            return -0.22, {"action_result": "fix_before_diagnosis"}
+            penalty = -0.15 if self.dynamics_profile == "v2" else -0.22
+            return penalty, {"action_result": "fix_before_diagnosis"}
         if self.stochastic_mode == "stochastic" and self._inspection_count() < self._minimum_inspections_for_fix:
             self._state.last_action_error = "Mitigation attempted before enough investigation context was collected"
             self._bump_reliability(-6)
+            if self.dynamics_profile == "v2":
+                self._add_note("Next step: gather one more investigation signal, then apply fix.")
             self._sync_checks()
-            return -0.14, {"action_result": "fix_insufficient_context"}
+            penalty = -0.10 if self.dynamics_profile == "v2" else -0.14
+            return penalty, {"action_result": "fix_insufficient_context"}
 
         if self._matches_any(normalized, self._active_valid_mitigations):
             if self.stochastic_mode == "stochastic":
@@ -622,6 +742,7 @@ class ProductionIncidentEnv:
                 self._add_note("Fix applied. Verification step required before resolving incident.")
                 self._pending_recovery_verification = True
                 self._fix_expected_to_restore = self._random.random() < success_probability
+                self._verification_completed_signals = set()
                 self._sync_checks()
                 return 0.14, {"action_result": "mitigation_pending_verification"}
             self._apply_valid_fix("Full mitigation applied successfully.")
@@ -683,6 +804,10 @@ class ProductionIncidentEnv:
             self._state.last_action_error = "Resolve blocked: verify fix outcome via logs/metrics/traces first"
             self._bump_reliability(-6)
             return -0.18, False, {"action_result": "resolve_without_verification"}
+        if self.dynamics_profile == "v2" and self.task.difficulty == "hard" and not self._state.monitoring_added:
+            self._state.last_action_error = "Resolve blocked: add monitor after restoration before closure"
+            self._bump_reliability(-4)
+            return -0.09, False, {"action_result": "resolve_without_monitor"}
         if self._state.service_restored and self._state.root_cause_confirmed:
             self._state.current_status = "resolved"
             self._add_note("Incident resolved after service restoration.")
@@ -749,14 +874,33 @@ class ProductionIncidentEnv:
             if not self._state.service_restored:
                 self._state.current_status = "timed_out"
 
+        repeat_penalty_applied = False
+        streak_action, streak_count = self._current_action_streak()
+        if self.dynamics_profile == "v2" and streak_count >= 3 and streak_action in {
+            ActionType.IDENTIFY_ROOT_CAUSE.value,
+            ActionType.APPLY_FIX.value,
+            ActionType.RESOLVE_INCIDENT.value,
+        }:
+            action_reward -= 0.05
+            repeat_penalty_applied = True
+            self._add_note(f"Repeated action '{streak_action}' reduced effectiveness; diversify investigation steps.")
+
         reward = self._compose_reward(action_reward)
         info.update(
             {
                 "task_id": self.task.task_id,
                 "difficulty": self.task.difficulty,
                 "stochastic_mode": self.stochastic_mode,
+                "dynamics_profile": self.dynamics_profile,
                 "scenario_label": self._scenario_label,
                 "pending_recovery_verification": self._pending_recovery_verification,
+                "verification_required_signals": sorted(self._verification_required_signals),
+                "verification_completed_signals": sorted(self._verification_completed_signals),
+                "required_diagnosis_evidence": sorted(self._required_diagnosis_evidence),
+                "minimum_inspections_for_diagnosis": self._minimum_inspections_for_diagnosis,
+                "minimum_inspections_for_fix": self._minimum_inspections_for_fix,
+                "action_streak_count": streak_count,
+                "repeat_penalty_applied": repeat_penalty_applied,
                 "title": self.task.title,
                 "last_action_error": self._state.last_action_error,
                 "done_reason": (

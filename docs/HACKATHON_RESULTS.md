@@ -5,18 +5,18 @@
 Command used for the main RL evidence:
 
 ```powershell
-python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo_v1
 ```
 
 Saved artifacts:
 
-- `artifacts/colab_demo/medium_epsilon_metrics.json`
-- `artifacts/colab_demo/medium_epsilon_rewards.csv`
-- `artifacts/colab_demo/medium_epsilon_rewards.png`
+- `artifacts/colab_demo_v1/medium_epsilon_metrics.json`
+- `artifacts/colab_demo_v1/medium_epsilon_rewards.csv`
+- `artifacts/colab_demo_v1/medium_epsilon_rewards.png`
 
 ## Baseline vs Trained (Stochastic Medium)
 
-Source file: `artifacts/colab_demo/medium_epsilon_metrics.json`
+Source file: `artifacts/colab_demo_v1/medium_epsilon_metrics.json`
 
 ### Random Baseline (5 episodes)
 
@@ -54,6 +54,22 @@ Best successful trajectory:
   "resolve_incident"
 ]
 ```
+
+## Harder Robustness Run (Stochastic Medium, v2)
+
+Command:
+
+```powershell
+python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v2 --output-dir artifacts/colab_demo_v2_tuned4_full
+```
+
+Source file: `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_metrics.json`
+
+- baseline success rate: `0.00%`
+- trained success rate: `27.50%`
+- trained root cause rate: `86.25%`
+- trained restore rate: `36.25%`
+- trained closure gap rate: `8.75%`
 
 ## Why This Is Better Than The Old Easy Result
 

@@ -321,6 +321,13 @@ class EpsilonGreedyPolicy:
         if not self.guided_flow:
             return list(valid_actions)
 
+        visible_signals = int(bool(state.logs))
+        visible_signals += int(bool(state.metrics))
+        visible_signals += int(bool(state.traces))
+        visible_signals += int(bool(state.recent_deploys))
+        visible_signals += int(bool(state.config_snapshot))
+        visible_signals += int(bool(state.code_snippet))
+
         if state.root_cause_confirmed and state.service_restored:
             phase = {ActionType.RESOLVE_INCIDENT, ActionType.ADD_MONITOR}
         elif state.current_status == "mitigation_pending_verification":
@@ -331,7 +338,7 @@ class EpsilonGreedyPolicy:
                 ActionType.INSPECT_DEPLOYS,
             }
         elif not state.root_cause_confirmed and not state.service_restored:
-            if len(state.investigation_notes) < 2:
+            if visible_signals < 2:
                 phase = {
                     ActionType.INSPECT_LOGS,
                     ActionType.INSPECT_METRICS,
@@ -376,6 +383,12 @@ class EpsilonGreedyPolicy:
     def _action_prior(self, state: IncidentObservation, action: ActionCandidate) -> float:
         normalized_content = self._normalize_phrase(action.content)
         recent_error = self._normalize_phrase(state.last_action_error)
+        visible_signals = int(bool(state.logs))
+        visible_signals += int(bool(state.metrics))
+        visible_signals += int(bool(state.traces))
+        visible_signals += int(bool(state.recent_deploys))
+        visible_signals += int(bool(state.config_snapshot))
+        visible_signals += int(bool(state.code_snippet))
 
         if action.action_type == ActionType.DO_NOTHING:
             return -2.0
@@ -396,11 +409,11 @@ class EpsilonGreedyPolicy:
             if ("evidence" in recent_error or "signal" in recent_error) and self._is_inspect(action):
                 return 2.8
             if action.action_type == ActionType.IDENTIFY_ROOT_CAUSE:
-                if len(state.investigation_notes) < 2:
+                if visible_signals < 2:
                     return 0.6
                 return 2.6 if normalized_content in self._known_root_keywords else 1.8
             if self._is_inspect(action):
-                return 2.1 if len(state.investigation_notes) < 2 else 1.0
+                return 2.1 if visible_signals < 2 else 1.0
             if action.action_type in {ActionType.APPLY_FIX, ActionType.ROLLBACK_DEPLOY, ActionType.SCALE_SERVICE}:
                 return -0.9
 
@@ -601,6 +614,7 @@ class EpisodeResult:
     service_restored: bool
     monitoring_added: bool
     stochastic_mode: str
+    env_profile: str
     scenario_label: str
 
 
@@ -698,6 +712,7 @@ def run_episode(env: ProductionIncidentEnv, policy: Policy) -> EpisodeResult:
         service_restored=state.service_restored,
         monitoring_added=state.monitoring_added,
         stochastic_mode=str(info.get("stochastic_mode", "deterministic")),
+        env_profile=str(info.get("dynamics_profile", "v1")),
         scenario_label=str(info.get("scenario_label", "default")),
     )
 
@@ -739,6 +754,7 @@ def train_loop(
     max_steps: Optional[int] = None,
     seed: int = 7,
     env_mode: str = "stochastic",
+    env_profile: str = "v1",
     policy: Optional[Policy] = None,
     csv_path: Optional[Path] = None,
     plot_path: Optional[Path] = None,
@@ -752,6 +768,7 @@ def train_loop(
             task_id=task_id,
             max_steps=max_steps,
             stochastic_mode=env_mode,
+            dynamics_profile=env_profile,
             random_seed=seed + episode_number,
         )
         result = run_episode(env, active_policy)
@@ -784,6 +801,7 @@ def evaluate_random_policy(
     max_steps: Optional[int],
     seed: int,
     env_mode: str = "stochastic",
+    env_profile: str = "v1",
 ) -> List[EpisodeResult]:
     policy = RandomPolicy(seed=seed)
     results: List[EpisodeResult] = []
@@ -792,6 +810,7 @@ def evaluate_random_policy(
             task_id=task_id,
             max_steps=max_steps,
             stochastic_mode=env_mode,
+            dynamics_profile=env_profile,
             random_seed=seed + (episode_number * 17),
         )
         result = run_episode(env, policy)
@@ -861,6 +880,12 @@ def parse_args() -> argparse.Namespace:
         choices=["deterministic", "stochastic"],
         help="Environment dynamics mode. Use stochastic for harder, varied training.",
     )
+    parser.add_argument(
+        "--env-profile",
+        default="v1",
+        choices=["v1", "v2"],
+        help="Environment profile. v1 preserves the current baseline, v2 enables stricter incident workflow dynamics.",
+    )
     parser.add_argument("--seed", type=int, default=7, help="Random seed.")
     parser.add_argument("--csv", default="artifacts/rl_rewards.csv", help="Optional CSV output path.")
     parser.add_argument("--plot", default="artifacts/rl_rewards.png", help="Optional reward plot output path.")
@@ -871,26 +896,28 @@ def main() -> None:
     args = parse_args()
 
     if args.baseline_random > 0:
-        print(f"Running random baseline on task '{args.task_id}' ({args.env_mode})...")
+        print(f"Running random baseline on task '{args.task_id}' ({args.env_mode}, profile={args.env_profile})...")
         random_results = evaluate_random_policy(
             num_episodes=args.baseline_random,
             task_id=args.task_id,
             max_steps=args.max_steps,
             seed=args.seed,
             env_mode=args.env_mode,
+            env_profile=args.env_profile,
         )
         summarize(random_results, "Random baseline")
         print()
 
     policy = make_policy(args.policy, args.seed, args.hf_model)
     label = "HuggingFace policy" if args.policy == "hf" else "Random policy" if args.policy == "random" else "Epsilon-greedy training"
-    print(f"Running {args.policy} policy on task '{args.task_id}' ({args.env_mode})...")
+    print(f"Running {args.policy} policy on task '{args.task_id}' ({args.env_mode}, profile={args.env_profile})...")
     rewards, train_results, _policy = train_loop(
         num_episodes=args.episodes,
         task_id=args.task_id,
         max_steps=args.max_steps,
         seed=args.seed,
         env_mode=args.env_mode,
+        env_profile=args.env_profile,
         policy=policy,
         csv_path=Path(args.csv) if args.csv else None,
         plot_path=Path(args.plot) if args.plot else None,

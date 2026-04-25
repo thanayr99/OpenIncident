@@ -15,6 +15,8 @@ export function ProjectLaunch({
   busy,
   message,
   loadDemoProjectTemplate,
+  runInstantAgentDemo,
+  instantDemo,
 }) {
   const selectedProject = projects.find((project) => project.project_id === selectedProjectId);
 
@@ -35,6 +37,17 @@ export function ProjectLaunch({
             ? "Add the project name, GitHub repository, frontend URL, and backend API URL. After this, agents can inspect code, discover routes, validate stories, read signals, and open incidents."
             : "Use your email and password. If the account does not exist yet, it will be created automatically for this environment."}
         </p>
+        <div className="launch-quick-demo">
+          <button type="button" onClick={runInstantAgentDemo} disabled={busy.instantDemo}>
+            {busy.instantDemo ? "Running demo..." : "Run instant agent demo"}
+          </button>
+          <small>Runs a local simulation session and shows inspect to diagnose to fix to resolve behavior.</small>
+          {instantDemo ? (
+            <p className="muted">
+              Latest: {instantDemo.finalStatus} | reward {instantDemo.totalReward} | actions {instantDemo.steps.map((step) => step.action).join(" -> ")}
+            </p>
+          ) : null}
+        </div>
 
         {!account ? (
           <form className="ox-form launch-form" onSubmit={createAccount}>
@@ -57,13 +70,13 @@ export function ProjectLaunch({
               <div className="template-strip launch-template-strip">
                 <button type="button" className="template-chip" onClick={loadDemoProjectTemplate}>Load demo template</button>
               </div>
-              <input placeholder="Project ID optional" value={projectForm.project_id} onChange={(event) => setProjectForm((current) => ({ ...current, project_id: event.target.value }))} />
               <input required placeholder="Project name" value={projectForm.name} onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))} />
               <input required placeholder="GitHub repository URL" value={projectForm.repository_url} onChange={(event) => setProjectForm((current) => ({ ...current, repository_url: event.target.value }))} />
               <input placeholder="Frontend URL (Vercel)" value={projectForm.frontend_url} onChange={(event) => setProjectForm((current) => ({ ...current, frontend_url: event.target.value, base_url: event.target.value || current.base_url }))} />
               <input placeholder="Backend API URL (Railway)" value={projectForm.backend_url} onChange={(event) => setProjectForm((current) => ({ ...current, backend_url: event.target.value }))} />
-              <input placeholder="Frontend health path (optional)" value={projectForm.frontend_healthcheck_path} onChange={(event) => setProjectForm((current) => ({ ...current, frontend_healthcheck_path: event.target.value }))} />
-              <input placeholder="Backend health path (optional)" value={projectForm.backend_healthcheck_path} onChange={(event) => setProjectForm((current) => ({ ...current, backend_healthcheck_path: event.target.value, healthcheck_path: event.target.value || current.healthcheck_path }))} />
+              <input placeholder="Frontend health path (default /)" value={projectForm.frontend_healthcheck_path} onChange={(event) => setProjectForm((current) => ({ ...current, frontend_healthcheck_path: event.target.value }))} />
+              <input placeholder="Backend health path (default /health)" value={projectForm.backend_healthcheck_path} onChange={(event) => setProjectForm((current) => ({ ...current, backend_healthcheck_path: event.target.value, healthcheck_path: event.target.value || current.healthcheck_path }))} />
+              <input placeholder="Project ID (optional advanced)" value={projectForm.project_id} onChange={(event) => setProjectForm((current) => ({ ...current, project_id: event.target.value }))} />
               <button disabled={busy.project} type="submit">{busy.project ? "Creating project..." : "Create project and open dashboard"}</button>
             </form>
 
