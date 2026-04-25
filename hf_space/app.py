@@ -8,8 +8,13 @@ import gradio as gr
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-METRICS_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_metrics.json"
-PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_rewards.png"
+PRIMARY_METRICS_PATH = REPO_ROOT / "artifacts" / "colab_demo_v1" / "medium_epsilon_metrics.json"
+LEGACY_METRICS_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_metrics.json"
+METRICS_PATH = PRIMARY_METRICS_PATH if PRIMARY_METRICS_PATH.exists() else LEGACY_METRICS_PATH
+
+PRIMARY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo_v1" / "medium_epsilon_rewards.png"
+LEGACY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_rewards.png"
+PLOT_PATH = PRIMARY_PLOT_PATH if PRIMARY_PLOT_PATH.exists() else LEGACY_PLOT_PATH
 DATASET_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_minimal" / "medium_stochastic_dataset_summary.json"
 TRL_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_minimal" / "medium_stochastic_trl_summary.json"
 GITHUB_URL = "https://github.com/thanayr99/OpenIncident"
@@ -131,9 +136,14 @@ links_md = f"""
 - GitHub repo: [{GITHUB_URL}]({GITHUB_URL})
 - Colab notebook: [{COLAB_URL}]({COLAB_URL})
 
-### RL command (baseline + trained)
+### RL command (official submission run: profile=v1)
 ```bash
-python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --output-dir artifacts/colab_demo
+python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo_v1
+```
+
+### RL command (harder robustness run: profile=v2)
+```bash
+python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v2 --output-dir artifacts/colab_demo_v2_tuned4_full
 ```
 
 ### HF TRL command (minimum requirement path)
@@ -205,7 +215,11 @@ with gr.Blocks(title="OpenIncident X", css=css) as demo:
             if PLOT_PATH.exists():
                 gr.Image(value=str(PLOT_PATH), label="Reward Curve")
             else:
-                gr.Markdown("Reward plot missing at `artifacts/colab_demo/medium_epsilon_rewards.png`.")
+                gr.Markdown(
+                    "Reward plot missing. Expected one of: "
+                    "`artifacts/colab_demo_v1/medium_epsilon_rewards.png` "
+                    "or `artifacts/colab_demo/medium_epsilon_rewards.png`."
+                )
             gr.Markdown("### Best successful trajectory")
             gr.Code(value=str(trajectory_actions), language="json")
             if trl_summary:
