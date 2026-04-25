@@ -32,7 +32,18 @@ def get_allowed_origins() -> list[str]:
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://open-incident.vercel.app",
     ]
+
+
+def get_allowed_origin_regex() -> str | None:
+    configured = os.getenv("OPENINCIDENT_ALLOWED_ORIGIN_REGEX", "").strip()
+    if configured:
+        return configured
+    allow_vercel_previews = os.getenv("OPENINCIDENT_ALLOW_VERCEL_PREVIEWS", "true").strip().lower()
+    if allow_vercel_previews in {"1", "true", "yes", "on"}:
+        return r"^https://.*\.vercel\.app$"
+    return None
 
 
 def get_database_url() -> str:

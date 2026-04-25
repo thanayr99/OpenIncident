@@ -89,7 +89,7 @@ from models import (
 )
 from server.agent_training import build_agent_training_plan
 from server.browser_checks import run_http_browser_check, run_playwright_browser_check
-from server.config import get_allowed_origins, get_api_port, get_database_target
+from server.config import get_allowed_origin_regex, get_allowed_origins, get_api_port, get_database_target
 from server.environment import ProductionIncidentEnv
 from server.github_repo import (
     build_frontend_story_plan,
@@ -219,6 +219,7 @@ app = FastAPI(title="Production Incident Debugging Environment", version="1.0.0"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_allowed_origins(),
+    allow_origin_regex=get_allowed_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -377,6 +378,7 @@ def system_status() -> dict[str, object]:
         "database_target": get_database_target(),
         "frontend_dist_ready": (FRONTEND_DIST_DIR / "index.html").exists(),
         "allowed_origins": get_allowed_origins(),
+        "allowed_origin_regex": get_allowed_origin_regex(),
     }
 
 
