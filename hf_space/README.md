@@ -22,6 +22,12 @@ This Space is the lightweight hackathon presentation layer for the project.
 - action space and incident lifecycle
 - RL baseline vs trained comparison
 - mandatory HF TRL training path (Colab-runnable)
+- separate hackathon writeup in `Blog.MD`
+
+## Hackathon Blog (Required Separate MD)
+
+- `Blog.MD` (repo file)
+- HF direct link: `https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/Blog.MD`
 
 ## Core Idea
 

@@ -24,7 +24,8 @@ pinned: false
 - Command pack: `docs/RUN_COMMANDS.md`
 - Production app container: `Dockerfile.app`
 - Demo video link (replace before final submission): `TODO_ADD_VIDEO_URL`
-- Hugging Face blog link (replace before final submission): `TODO_ADD_BLOG_URL`
+- Hackathon blog (MD in Space repo): `Blog.MD`
+- Hugging Face blog URL: https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/Blog.MD
 
 ## Project Description
 
