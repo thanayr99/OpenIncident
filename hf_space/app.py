@@ -234,6 +234,26 @@ python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stoc
 ```
 """
 
+submission_links_md = f"""
+## Final Submission Links (Copy-Paste)
+
+### 1) Hugging Face Space URL for your Env
+`{SPACE_HUB_URL}`
+
+### 2) Training Run Notebook URL
+`{COLAB_URL}`
+
+### 3) YouTube demo video URL
+`{YOUTUBE_URL}`
+
+### Optional supporting links
+- Blog MD (HF repo): `{BLOG_URL}`
+- Full video script: `{SCRIPT_URL}`
+- Live application (Vercel): `{APP_URL}`
+- Space app URL: `{SPACE_APP_URL}`
+- GitHub repository: `{GITHUB_URL}`
+"""
+
 css = """
 :root {
   --panel-bg: linear-gradient(180deg, #121a2b, #0b1020);
@@ -418,6 +438,9 @@ with gr.Blocks(title="OpenIncident X", css=css) as demo:
             if trl_summary:
                 gr.Markdown("### TRL training summary")
                 gr.JSON(value=trl_summary)
+
+        with gr.TabItem("Final Submission Links"):
+            gr.Markdown(submission_links_md)
 
         with gr.TabItem("Raw Metrics"):
             gr.Markdown("### v1 metrics JSON")
