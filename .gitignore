@@ -39,3 +39,9 @@ artifacts/colab_demo_v2_tuned4_full/**
 artifacts/trl_minimal/**
 !artifacts/trl_minimal/medium_stochastic_dataset_summary.json
 !artifacts/trl_minimal/medium_stochastic_trl_summary.json
+!artifacts/trl_loss_proof/
+artifacts/trl_loss_proof/**
+!artifacts/trl_loss_proof/medium_stochastic_v2_dataset_summary.json
+!artifacts/trl_loss_proof/medium_stochastic_v2_trl_summary.json
+!artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.csv
+!artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.png

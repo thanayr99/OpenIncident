@@ -1,0 +1,13 @@
+{
+  "train_runtime": 10.5114,
+  "train_samples_per_second": 9.894,
+  "train_steps_per_second": 2.473,
+  "total_flos": 16748809080.0,
+  "train_loss": 10.823042942927433,
+  "train_samples": 104,
+  "model_id": "sshleifer/tiny-gpt2",
+  "dataset_path": "artifacts\\trl_loss_proof\\medium_stochastic_v2_sft_dataset.jsonl",
+  "model_output_dir": "artifacts\\trl_loss_proof\\trained_model",
+  "loss_csv": "artifacts\\trl_loss_proof\\medium_stochastic_v2_trl_loss.csv",
+  "loss_plot": "artifacts\\trl_loss_proof\\medium_stochastic_v2_trl_loss.png"
+}

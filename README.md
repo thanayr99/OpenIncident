@@ -23,11 +23,18 @@ pinned: false
 - Public deployment guide: `docs/DEPLOY_PUBLIC.md`
 - Command pack: `docs/RUN_COMMANDS.md`
 - Production app container: `Dockerfile.app`
-- Demo video link (replace before final submission): `TODO_ADD_VIDEO_URL`
+- Demo video link (YouTube): https://youtu.be/8L-1TsajsTA?si=2ZaoWftUeKxj0jqS
 - Final recording script with timestamps + results: `VIDEO_SCRIPT_FINAL.md`
 - Hackathon blog (MD in Space repo): `Blog.MD`
 - Hugging Face blog URL: https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/Blog.MD
 - Hugging Face video script URL: https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/VIDEO_SCRIPT_FINAL.md
+
+## Training Evidence (Reward + Loss)
+
+- Reward plot v1: `artifacts/colab_demo_v1/medium_epsilon_rewards.png`
+- Reward plot v2: `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_rewards.png`
+- TRL loss plot: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.png`
+- TRL loss CSV: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.csv`
 
 ## Project Description
 

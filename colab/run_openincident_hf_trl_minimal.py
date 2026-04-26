@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import inspect
 import json
 import random
@@ -170,11 +171,67 @@ def _build_trainer(
         raise
 
 
+def _save_loss_artifacts(log_history: Sequence[Dict[str, Any]], output_dir: Path, run_stem: str) -> Dict[str, str]:
+    loss_rows: List[Dict[str, float]] = []
+    for row in log_history:
+        if "loss" not in row:
+            continue
+        try:
+            loss_value = float(row["loss"])
+        except (TypeError, ValueError):
+            continue
+        step_value = row.get("step", len(loss_rows) + 1)
+        try:
+            step_float = float(step_value)
+        except (TypeError, ValueError):
+            step_float = float(len(loss_rows) + 1)
+        epoch_value = row.get("epoch", 0.0)
+        try:
+            epoch_float = float(epoch_value)
+        except (TypeError, ValueError):
+            epoch_float = 0.0
+        loss_rows.append({"step": step_float, "epoch": epoch_float, "loss": loss_value})
+
+    if not loss_rows:
+        return {}
+
+    csv_path = output_dir / f"{run_stem}_trl_loss.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["step", "epoch", "loss"])
+        writer.writeheader()
+        for row in loss_rows:
+            writer.writerow(row)
+
+    artifacts: Dict[str, str] = {"loss_csv": str(csv_path)}
+    try:
+        import matplotlib.pyplot as plt
+
+        plot_path = output_dir / f"{run_stem}_trl_loss.png"
+        steps = [row["step"] for row in loss_rows]
+        losses = [row["loss"] for row in loss_rows]
+        plt.figure(figsize=(8, 4))
+        plt.plot(steps, losses, linewidth=2, color="#00E5FF")
+        plt.xlabel("Training Step")
+        plt.ylabel("Loss")
+        plt.title("HF TRL SFT Training Loss")
+        plt.grid(alpha=0.25)
+        plt.tight_layout()
+        plt.savefig(plot_path, dpi=180)
+        plt.close()
+        artifacts["loss_plot"] = str(plot_path)
+    except Exception:
+        # Plot generation is optional; CSV remains primary artifact.
+        pass
+
+    return artifacts
+
+
 def run_trl_training(
     *,
     dataset_path: Path,
     model_id: str,
     output_dir: Path,
+    run_stem: str,
     learning_rate: float,
     num_train_epochs: float,
     batch_size: int,
@@ -259,6 +316,8 @@ def run_trl_training(
     metrics["model_id"] = model_id
     metrics["dataset_path"] = str(dataset_path)
     metrics["model_output_dir"] = str(model_output_dir)
+    loss_artifacts = _save_loss_artifacts(trainer.state.log_history, output_dir, run_stem)
+    metrics.update(loss_artifacts)
     return metrics
 
 
@@ -322,6 +381,7 @@ def main() -> None:
         dataset_path=dataset_path,
         model_id=args.model_id,
         output_dir=output_dir,
+        run_stem=f"{args.task_id}_{args.env_mode}{profile_suffix}",
         learning_rate=args.learning_rate,
         num_train_epochs=args.num_train_epochs,
         batch_size=args.batch_size,

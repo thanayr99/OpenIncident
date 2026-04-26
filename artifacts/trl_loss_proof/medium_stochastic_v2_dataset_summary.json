@@ -1,0 +1,12 @@
+{
+  "dataset_path": "artifacts\\trl_loss_proof\\medium_stochastic_v2_sft_dataset.jsonl",
+  "records": 104,
+  "episodes_collected": 20,
+  "warmup_episodes": 5,
+  "successful_episodes": 8,
+  "failed_episodes_kept": 2,
+  "keep_failed_ratio": 0.15,
+  "task_id": "medium",
+  "env_mode": "stochastic",
+  "env_profile": "v2"
+}

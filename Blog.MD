@@ -73,10 +73,10 @@ Source:
 Key outcomes:
 
 - baseline success: `0.00%`
-- trained success: `33.33%`
+- trained success: `26.67%`
 - trained root-cause rate: `63.33%`
-- trained restore rate: `43.33%`
-- trained closure gap: `10.00%`
+- trained restore rate: `30.00%`
+- trained closure gap: `3.33%`
 
 ### Harder robustness packet (stochastic medium, profile=v2)
 
@@ -113,6 +113,14 @@ Example command:
 python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
 ```
 
+## Training Evidence Artifacts
+
+- reward plot v1: `artifacts/colab_demo_v1/medium_epsilon_rewards.png`
+- reward plot v2: `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_rewards.png`
+- TRL loss plot: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.png`
+- TRL loss CSV: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.csv`
+- TRL summary JSON: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_summary.json`
+
 ## Is This Real Data or Simulation?
 
 Training data is generated from environment trajectories, not from a static scraped dataset.
@@ -129,9 +137,11 @@ python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --base
 
 ## Links
 
-- Space: https://thanayr-openincident.hf.space
+- Space (Hub): https://huggingface.co/spaces/thanayr/OpenIncident
+- Space (App): https://thanayr-openincident.hf.space
 - GitHub: https://github.com/thanayr99/OpenIncident
 - Colab: https://colab.research.google.com/drive/1R4IrMr5nIKm7lZfbI08EP9ijkUgF7fxH?usp=sharing
+- YouTube demo: https://youtu.be/8L-1TsajsTA?si=2ZaoWftUeKxj0jqS
 
 ## Closing
 

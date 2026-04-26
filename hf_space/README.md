@@ -33,6 +33,7 @@ This Space is the lightweight hackathon presentation layer for the project.
 
 - `VIDEO_SCRIPT_FINAL.md` (repo file)
 - HF direct link: `https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/VIDEO_SCRIPT_FINAL.md`
+- YouTube demo: `https://youtu.be/8L-1TsajsTA?si=2ZaoWftUeKxj0jqS`
 
 ## Core Idea
 
@@ -121,3 +122,10 @@ python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --base
 ## Dependency Pin
 
 `openenv-core==0.2.3` is pinned in `pyproject.toml`.
+
+## Training Evidence Artifacts
+
+- reward plot v1: `artifacts/colab_demo_v1/medium_epsilon_rewards.png`
+- reward plot v2: `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_rewards.png`
+- TRL loss plot: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.png`
+- TRL loss CSV: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.csv`
