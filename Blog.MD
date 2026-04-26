@@ -11,6 +11,20 @@ During an outage, an agent must inspect incomplete signals, form a diagnosis, ap
 
 We built OpenIncident X to model that workflow as a trainable environment.
 
+## Why I Chose This Project
+
+I chose this because reliability incidents are high-pressure and high-impact.
+At 2 AM, during real outages, engineers do not need another explanation tool; they need disciplined action under uncertainty.
+
+Many current AI systems can describe incidents, but they do not reliably handle end-to-end incident response:
+
+- what to inspect first
+- how to avoid misleading signals
+- when to fix versus when to roll back
+- when it is actually safe to close
+
+OpenIncident X is my attempt to train agents for this exact capability gap.
+
 ## Environment Design
 
 Primary environment:
@@ -110,7 +124,7 @@ Minimal notebook:
 Example command:
 
 ```bash
-python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_loss_proof
 ```
 
 ## Training Evidence Artifacts
@@ -120,6 +134,26 @@ python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stoc
 - TRL loss plot: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.png`
 - TRL loss CSV: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.csv`
 - TRL summary JSON: `artifacts/trl_loss_proof/medium_stochastic_v2_trl_summary.json`
+
+## Video Narrative Flow (Used in Final Demo)
+
+This is the polished story arc used in the final 7 to 8 minute walkthrough:
+
+1. 2 AM outage hook and why incident response is hard.
+2. Why explanation-only AI is not enough.
+3. Product walkthrough: login, project setup, runtime context.
+4. Check execution and incident creation from failed validations.
+5. Multi-agent collaboration: Planner, Frontend/API, Observability, Reliability, Triage, Guardian, Oversight.
+6. RL environment: partially observable `ProductionIncidentEnv`.
+7. Reward logic and safe-action behavior.
+8. v1 benchmark result vs baseline.
+9. v2 harder-profile robustness result.
+10. HF TRL reproducibility path and final conclusion.
+
+Full script file:
+
+- `VIDEO_SCRIPT_FINAL.md`
+- HF direct link: `https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/VIDEO_SCRIPT_FINAL.md`
 
 ## Is This Real Data or Simulation?
 
@@ -142,6 +176,18 @@ python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --base
 - GitHub: https://github.com/thanayr99/OpenIncident
 - Colab: https://colab.research.google.com/drive/1R4IrMr5nIKm7lZfbI08EP9ijkUgF7fxH?usp=sharing
 - YouTube demo: https://youtu.be/8L-1TsajsTA?si=2ZaoWftUeKxj0jqS
+
+## Submission Checklist (Final)
+
+- OpenEnv latest pinned: `openenv-core==0.2.3`
+- OpenEnv-compatible environment implemented: `ProductionIncidentEnv`
+- Minimal HF TRL training script provided: `colab/run_openincident_hf_trl_minimal.py`
+- Colab notebook linked for rerun: `colab/OpenIncidentX_HF_TRL_Minimal.ipynb`
+- Real training evidence included: reward plots + TRL loss plot and CSV
+- Hugging Face Space published and runnable
+- Separate blog MD included (`Blog.MD`)
+- Video link included and cross-linked from README/Space
+- Reproducibility commands included
 
 ## Closing
 

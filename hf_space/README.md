@@ -102,7 +102,7 @@ Minimal notebook path:
 Command:
 
 ```bash
-python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_loss_proof
 ```
 
 ## Local / Colab Repro (RL Baseline + Q-learning)

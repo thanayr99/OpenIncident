@@ -1,6 +1,6 @@
 # OpenIncident X Hackathon Final Submission Guide
 
-Last updated: April 25, 2026
+Last updated: April 26, 2026
 
 ## 1) Non-Negotiable Requirement Check
 
@@ -30,14 +30,14 @@ python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --base
 Minimal HF TRL run:
 
 ```powershell
-python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_loss_proof
 ```
 
 Windows PowerShell (safe UTF-8 mode for TRL template loading):
 
 ```powershell
 $env:PYTHONUTF8='1'
-python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_loss_proof
 ```
 
 ## 3) Files To Show Judges
@@ -47,8 +47,10 @@ python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stoc
 - `artifacts/colab_demo_v1/medium_epsilon_rewards.csv`
 - `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_metrics.json`
 - `artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_rewards.png`
-- `artifacts/trl_minimal/medium_stochastic_dataset_summary.json`
-- `artifacts/trl_minimal/medium_stochastic_trl_summary.json`
+- `artifacts/trl_loss_proof/medium_stochastic_v2_dataset_summary.json`
+- `artifacts/trl_loss_proof/medium_stochastic_v2_trl_summary.json`
+- `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.png`
+- `artifacts/trl_loss_proof/medium_stochastic_v2_trl_loss.csv`
 - `artifacts/rl_test_cases_65.json`
 
 ## 4) Current Main Result (Stochastic Medium)
@@ -56,10 +58,10 @@ python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stoc
 From `artifacts/colab_demo_v1/medium_epsilon_metrics.json`:
 
 - baseline success rate: `0.00%`
-- trained success rate: `33.33%`
+- trained success rate: `26.67%`
 - trained root cause rate: `63.33%`
-- trained restore rate: `43.33%`
-- trained closure gap rate: `10.00%`
+- trained restore rate: `30.00%`
+- trained closure gap rate: `3.33%`
 
 Harder profile cross-check (`artifacts/colab_demo_v2_tuned4_full/medium_epsilon_v2_metrics.json`):
 

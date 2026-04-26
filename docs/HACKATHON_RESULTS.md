@@ -30,27 +30,27 @@ Source file: `artifacts/colab_demo_v1/medium_epsilon_metrics.json`
 
 ### Epsilon-Greedy Trained Policy (30 episodes)
 
-- avg env reward: `1.6891`
-- avg train reward: `2.7791`
-- avg steps: `9.57`
-- success rate: `33.33%`
+- avg env reward: `1.0838`
+- avg train reward: `1.5671`
+- avg steps: `9.60`
+- success rate: `26.67%`
 - root cause rate: `63.33%`
-- restore rate: `43.33%`
-- closure gap rate: `10.00%`
+- restore rate: `30.00%`
+- closure gap rate: `3.33%`
 
 Best successful trajectory:
 
 ```text
 [
-  "inspect_config",
   "identify_root_cause",
   "inspect_traces",
   "identify_root_cause",
-  "apply_fix",
-  "apply_fix",
-  "apply_fix",
-  "apply_fix",
   "inspect_logs",
+  "identify_root_cause",
+  "apply_fix",
+  "apply_fix",
+  "apply_fix",
+  "inspect_deploys",
   "resolve_incident"
 ]
 ```
@@ -90,7 +90,7 @@ Minimal Colab notebook path:
 Run command:
 
 ```powershell
-python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_loss_proof
 ```
 
 This produces:
