@@ -83,4 +83,5 @@ Harder profile cross-check (`artifacts/colab_demo_v2_tuned4_full/medium_epsilon_
 - Push latest repo with updated docs and Colab notebook.
 - Ensure HF Space points to `hf_space/app.py` and updated `hf_space/README.md`.
 - Add final links in root README: Space URL, Colab notebook URL, short video/blog URL.
+- Keep live product URL in README/blog for demo context: `https://open-incident.vercel.app/`.
 - Freeze one final metrics run and do not change artifacts after submission lock.

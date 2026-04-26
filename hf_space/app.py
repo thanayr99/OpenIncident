@@ -16,11 +16,12 @@ PRIMARY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo_v1" / "medium_epsilon_
 LEGACY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_rewards.png"
 PLOT_PATH = PRIMARY_PLOT_PATH if PRIMARY_PLOT_PATH.exists() else LEGACY_PLOT_PATH
 V2_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo_v2_tuned4_full" / "medium_epsilon_v2_rewards.png"
-DATASET_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_minimal" / "medium_stochastic_dataset_summary.json"
-TRL_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_minimal" / "medium_stochastic_trl_summary.json"
+DATASET_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_loss_proof" / "medium_stochastic_v2_dataset_summary.json"
+TRL_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_loss_proof" / "medium_stochastic_v2_trl_summary.json"
 GITHUB_URL = "https://github.com/thanayr99/OpenIncident"
 COLAB_URL = "https://colab.research.google.com/drive/1R4IrMr5nIKm7lZfbI08EP9ijkUgF7fxH?usp=sharing"
 SPACE_URL = "https://thanayr-openincident.hf.space"
+APP_URL = "https://open-incident.vercel.app/"
 
 
 def load_metrics() -> dict:
@@ -39,22 +40,22 @@ def load_metrics() -> dict:
             "avg_steps": 10.0,
         },
         "trained": {
-            "success_rate": 0.3333,
+            "success_rate": 0.2667,
             "root_cause_rate": 0.6333,
-            "restore_rate": 0.4333,
-            "closure_gap_rate": 0.1,
-            "avg_steps": 9.57,
+            "restore_rate": 0.3,
+            "closure_gap_rate": 0.0333,
+            "avg_steps": 9.6,
             "best_successful_trajectory": {
                 "actions": [
-                    "inspect_config",
                     "identify_root_cause",
                     "inspect_traces",
                     "identify_root_cause",
-                    "apply_fix",
-                    "apply_fix",
-                    "apply_fix",
-                    "apply_fix",
                     "inspect_logs",
+                    "identify_root_cause",
+                    "apply_fix",
+                    "apply_fix",
+                    "apply_fix",
+                    "inspect_deploys",
                     "resolve_incident",
                 ],
             },
@@ -134,6 +135,7 @@ results_table_md = f"""
 links_md = f"""
 ### Reproducibility links
 - Space: [{SPACE_URL}]({SPACE_URL})
+- Live application: [{APP_URL}]({APP_URL})
 - GitHub repo: [{GITHUB_URL}]({GITHUB_URL})
 - Colab notebook: [{COLAB_URL}]({COLAB_URL})
 
@@ -149,7 +151,7 @@ python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --base
 
 ### HF TRL command (minimum requirement path)
 ```bash
-python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_minimal
+python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_loss_proof
 ```
 """
 

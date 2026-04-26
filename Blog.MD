@@ -173,6 +173,7 @@ python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --base
 
 - Space (Hub): https://huggingface.co/spaces/thanayr/OpenIncident
 - Space (App): https://thanayr-openincident.hf.space
+- Live application: https://open-incident.vercel.app/
 - GitHub: https://github.com/thanayr99/OpenIncident
 - Colab: https://colab.research.google.com/drive/1R4IrMr5nIKm7lZfbI08EP9ijkUgF7fxH?usp=sharing
 - YouTube demo: https://youtu.be/8L-1TsajsTA?si=2ZaoWftUeKxj0jqS

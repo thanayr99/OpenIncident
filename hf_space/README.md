@@ -23,6 +23,7 @@ This Space is the lightweight hackathon presentation layer for the project.
 - RL baseline vs trained comparison
 - mandatory HF TRL training path (Colab-runnable)
 - separate hackathon writeup in `Blog.MD`
+- deployed application flow at `https://open-incident.vercel.app/`
 
 ## Hackathon Blog (Required Separate MD)
 
@@ -34,6 +35,7 @@ This Space is the lightweight hackathon presentation layer for the project.
 - `VIDEO_SCRIPT_FINAL.md` (repo file)
 - HF direct link: `https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/VIDEO_SCRIPT_FINAL.md`
 - YouTube demo: `https://youtu.be/8L-1TsajsTA?si=2ZaoWftUeKxj0jqS`
+- Live application: `https://open-incident.vercel.app/`
 
 ## Core Idea
 

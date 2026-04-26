@@ -13,6 +13,7 @@ pinned: false
 ## Hackathon Quick Links
 
 - Hugging Face Space: https://huggingface.co/spaces/thanayr/OpenIncident
+- Live application (Vercel): https://open-incident.vercel.app/
 - Minimal HF TRL notebook path: `colab/OpenIncidentX_HF_TRL_Minimal.ipynb`
 - Colab notebook link: https://colab.research.google.com/drive/1R4IrMr5nIKm7lZfbI08EP9ijkUgF7fxH?usp=sharing
 - RL baseline + training runner: `colab/run_openincident_hackathon.py`
