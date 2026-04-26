@@ -29,6 +29,11 @@ This Space is the lightweight hackathon presentation layer for the project.
 - `Blog.MD` (repo file)
 - HF direct link: `https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/Blog.MD`
 
+## Final Video Script (With Results)
+
+- `VIDEO_SCRIPT_FINAL.md` (repo file)
+- HF direct link: `https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/VIDEO_SCRIPT_FINAL.md`
+
 ## Core Idea
 
 The trained agent does not begin with full ground truth.
@@ -60,12 +65,12 @@ And the main trained agent for the hackathon is:
 From `artifacts/colab_demo_v1/medium_epsilon_metrics.json`:
 
 - baseline success rate: `0.00%`
-- trained success rate: `33.33%`
+- trained success rate: `26.67%`
 - baseline avg env reward: `0.6276`
-- trained avg env reward: `1.6891`
+- trained avg env reward: `1.0838`
 - trained root cause rate: `63.33%`
-- trained restore rate: `43.33%`
-- trained closure gap rate: `10.00%`
+- trained restore rate: `30.00%`
+- trained closure gap rate: `3.33%`
 
 ## Harder Robustness Result (Stochastic Medium, profile=v2)
 
