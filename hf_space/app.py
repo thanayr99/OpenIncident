@@ -8,26 +8,52 @@ import gradio as gr
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PRIMARY_METRICS_PATH = REPO_ROOT / "artifacts" / "colab_demo_v1" / "medium_epsilon_metrics.json"
+
+PRIMARY_METRICS_PATH = (
+    REPO_ROOT / "artifacts" / "colab_demo_v1" / "medium_epsilon_metrics.json"
+)
 LEGACY_METRICS_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_metrics.json"
-METRICS_PATH = PRIMARY_METRICS_PATH if PRIMARY_METRICS_PATH.exists() else LEGACY_METRICS_PATH
+V2_METRICS_PATH = (
+    REPO_ROOT / "artifacts" / "colab_demo_v2_tuned4_full" / "medium_epsilon_v2_metrics.json"
+)
 
 PRIMARY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo_v1" / "medium_epsilon_rewards.png"
 LEGACY_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo" / "medium_epsilon_rewards.png"
-PLOT_PATH = PRIMARY_PLOT_PATH if PRIMARY_PLOT_PATH.exists() else LEGACY_PLOT_PATH
-V2_PLOT_PATH = REPO_ROOT / "artifacts" / "colab_demo_v2_tuned4_full" / "medium_epsilon_v2_rewards.png"
-DATASET_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_loss_proof" / "medium_stochastic_v2_dataset_summary.json"
-TRL_SUMMARY_PATH = REPO_ROOT / "artifacts" / "trl_loss_proof" / "medium_stochastic_v2_trl_summary.json"
+V2_PLOT_PATH = (
+    REPO_ROOT / "artifacts" / "colab_demo_v2_tuned4_full" / "medium_epsilon_v2_rewards.png"
+)
+TRL_LOSS_PLOT_PATH = (
+    REPO_ROOT / "artifacts" / "trl_loss_proof" / "medium_stochastic_v2_trl_loss.png"
+)
+
+DATASET_SUMMARY_PATH = (
+    REPO_ROOT / "artifacts" / "trl_loss_proof" / "medium_stochastic_v2_dataset_summary.json"
+)
+TRL_SUMMARY_PATH = (
+    REPO_ROOT / "artifacts" / "trl_loss_proof" / "medium_stochastic_v2_trl_summary.json"
+)
+
 GITHUB_URL = "https://github.com/thanayr99/OpenIncident"
 COLAB_URL = "https://colab.research.google.com/drive/1R4IrMr5nIKm7lZfbI08EP9ijkUgF7fxH?usp=sharing"
-SPACE_URL = "https://thanayr-openincident.hf.space"
+SPACE_HUB_URL = "https://huggingface.co/spaces/thanayr/OpenIncident"
+SPACE_APP_URL = "https://thanayr-openincident.hf.space"
 APP_URL = "https://open-incident.vercel.app/"
+YOUTUBE_URL = "https://youtu.be/8L-1TsajsTA?si=2ZaoWftUeKxj0jqS"
+BLOG_URL = "https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/Blog.MD"
+SCRIPT_URL = "https://huggingface.co/spaces/thanayr/OpenIncident/blob/main/VIDEO_SCRIPT_FINAL.md"
 
 
-def load_metrics() -> dict:
-    if METRICS_PATH.exists():
-        return json.loads(METRICS_PATH.read_text(encoding="utf-8"))
+def load_json(path: Path) -> dict:
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return {}
 
+
+def load_v1_metrics() -> dict:
+    source = PRIMARY_METRICS_PATH if PRIMARY_METRICS_PATH.exists() else LEGACY_METRICS_PATH
+    raw = load_json(source)
+    if raw:
+        return raw
     return {
         "task_id": "medium",
         "policy": "epsilon",
@@ -37,6 +63,7 @@ def load_metrics() -> dict:
             "root_cause_rate": 0.2,
             "restore_rate": 0.0,
             "closure_gap_rate": 0.0,
+            "avg_env_reward": 0.6276,
             "avg_steps": 10.0,
         },
         "trained": {
@@ -44,8 +71,10 @@ def load_metrics() -> dict:
             "root_cause_rate": 0.6333,
             "restore_rate": 0.3,
             "closure_gap_rate": 0.0333,
+            "avg_env_reward": 1.0838,
             "avg_steps": 9.6,
             "best_successful_trajectory": {
+                "steps": 10,
                 "actions": [
                     "identify_root_cause",
                     "inspect_traces",
@@ -60,200 +89,342 @@ def load_metrics() -> dict:
                 ],
             },
         },
-        "artifacts": {
-            "plot": str(PLOT_PATH),
-        },
     }
 
 
-def load_optional_json(path: Path) -> dict:
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
+def as_pct(value: float) -> str:
+    return f"{value * 100:.1f}%"
 
 
-def percent(value: float) -> str:
+def as_pct_compact(value: float) -> str:
     return f"{value * 100:.0f}%"
 
 
-def metric_card(title: str, value: str, hint: str = "") -> str:
-    hint_html = f"<div class='card-hint'>{hint}</div>" if hint else ""
+def delta_pct(current: float, baseline: float) -> str:
+    return f"{(current - baseline) * 100:+.1f}%"
+
+
+def kpi_card(title: str, value: str, subtitle: str, tone: str = "blue") -> str:
     return (
-        "<div class='metric-card'>"
-        f"<div class='card-title'>{title}</div>"
-        f"<div class='card-value'>{value}</div>"
-        f"{hint_html}"
+        f"<div class='kpi {tone}'>"
+        f"<div class='kpi-title'>{title}</div>"
+        f"<div class='kpi-value'>{value}</div>"
+        f"<div class='kpi-sub'>{subtitle}</div>"
         "</div>"
     )
 
 
-def delta_text(current: float, baseline_value: float, as_percent: bool = False) -> str:
-    delta = current - baseline_value
-    if as_percent:
-        return f"{delta * 100:+.2f}%"
-    return f"{delta:+.2f}"
+v1 = load_v1_metrics()
+v2 = load_json(V2_METRICS_PATH)
+dataset_summary = load_json(DATASET_SUMMARY_PATH)
+trl_summary = load_json(TRL_SUMMARY_PATH)
 
+baseline = v1.get("baseline", {})
+trained = v1.get("trained", {})
+trajectory = trained.get("best_successful_trajectory", {})
+actions = trajectory.get("actions", [])
 
-metrics = load_metrics()
-baseline = metrics["baseline"]
-trained = metrics["trained"]
-trajectory = trained.get("best_successful_trajectory") or {}
-trajectory_actions = trajectory.get("actions", [])
-dataset_summary = load_optional_json(DATASET_SUMMARY_PATH)
-trl_summary = load_optional_json(TRL_SUMMARY_PATH)
+v2_baseline = v2.get("baseline", {})
+v2_trained = v2.get("trained", {})
 
-header_md = """
-# OpenIncident X
-OpenEnv-compatible multi-agent professional operations environment for training incident-response agents.
+plot_v1 = PRIMARY_PLOT_PATH if PRIMARY_PLOT_PATH.exists() else LEGACY_PLOT_PATH
+plot_v2 = V2_PLOT_PATH
+plot_trl = TRL_LOSS_PLOT_PATH
+
+hero_html = f"""
+<section class="hero">
+  <div class="hero-badge">OpenEnv India Hackathon 2026 Final Submission</div>
+  <h1>OpenIncident X</h1>
+  <p class="hero-sub">
+    Multi-agent incident response platform + trainable RL environment for long-horizon,
+    partially observable production outages.
+  </p>
+  <p class="hero-story">
+    It is 2 AM. Alerts are firing. Logs and metrics disagree. OpenIncident X trains agents to
+    inspect, diagnose, recover, and close incidents safely, not just explain them.
+  </p>
+  <div class="hero-links">
+    <a href="{SPACE_APP_URL}" target="_blank">HF Space App</a>
+    <a href="{APP_URL}" target="_blank">Live Product (Vercel)</a>
+    <a href="{YOUTUBE_URL}" target="_blank">YouTube Demo</a>
+    <a href="{COLAB_URL}" target="_blank">Colab Notebook</a>
+    <a href="{GITHUB_URL}" target="_blank">GitHub Repo</a>
+  </div>
+</section>
 """
 
-overview_md = f"""
-### Why judges care
-- Partially observable incident-response world (logs, metrics, traces, deploys, config, code)
-- Long-horizon recovery path instead of single-step reward hacking
-- Baseline vs trained policy comparison with saved artifacts
-- Minimum hackathon requirement covered: hosted Space + Colab + HF TRL path
+story_md = """
+## Story Narrative (Judge-Facing)
 
-### Training target
-- Environment: `ProductionIncidentEnv`
-- Primary trained role: `Reliability Agent`
-- Task: `{metrics.get("task_id", "medium")}`
-- Policy: `{metrics.get("policy", "epsilon")}`
-- Environment mode: `{metrics.get("env_mode", "stochastic")}`
+### 1) The problem
+Production incidents are noisy, ambiguous, and expensive. A single wrong action can increase downtime.
+
+### 2) Why this project
+Most AI systems can explain incidents, but they do not reliably handle them end-to-end:
+inspect -> diagnose -> fix -> verify -> close.
+
+### 3) What OpenIncident X adds
+- Multi-agent product workflow for operational reasoning.
+- OpenEnv-compatible `ProductionIncidentEnv` for measurable training.
+- Evidence-backed RL comparison with saved artifacts and reproducible commands.
+
+### 4) Why judges should care
+This is not a toy game. It is a realistic software-operations world with partial observability,
+long-horizon action dependencies, and safety-sensitive decision paths.
 """
 
-results_table_md = f"""
+requirements_md = f"""
+## Submission Coverage (Non-Negotiables)
+
+- OpenEnv latest pinned: `openenv-core==0.2.3`
+- Environment hosted on HF Space: [{SPACE_HUB_URL}]({SPACE_HUB_URL})
+- Working training scripts:
+  - RL runner: `colab/run_openincident_hackathon.py`
+  - HF TRL runner: `colab/run_openincident_hf_trl_minimal.py`
+- Colab rerun notebook: [{COLAB_URL}]({COLAB_URL})
+- Real training evidence committed:
+  - reward plots (`v1`, `v2`)
+  - TRL loss plot + CSV
+- Mini-blog MD: [{BLOG_URL}]({BLOG_URL})
+- YouTube demo: [{YOUTUBE_URL}]({YOUTUBE_URL})
+- Full video script: [{SCRIPT_URL}]({SCRIPT_URL})
+- Live product app: [{APP_URL}]({APP_URL})
+"""
+
+results_md = f"""
+## Results Snapshot
+
+### Official packet (v1: stochastic medium)
+
 | Metric | Baseline | Trained | Delta |
 |---|---:|---:|---:|
-| Success rate | {percent(baseline.get("success_rate", 0.0))} | {percent(trained.get("success_rate", 0.0))} | {delta_text(trained.get("success_rate", 0.0), baseline.get("success_rate", 0.0), as_percent=True)} |
-| Root-cause rate | {percent(baseline.get("root_cause_rate", 0.0))} | {percent(trained.get("root_cause_rate", 0.0))} | {delta_text(trained.get("root_cause_rate", 0.0), baseline.get("root_cause_rate", 0.0), as_percent=True)} |
-| Restore rate | {percent(baseline.get("restore_rate", 0.0))} | {percent(trained.get("restore_rate", 0.0))} | {delta_text(trained.get("restore_rate", 0.0), baseline.get("restore_rate", 0.0), as_percent=True)} |
-| Closure gap | {percent(baseline.get("closure_gap_rate", 0.0))} | {percent(trained.get("closure_gap_rate", 0.0))} | {delta_text(trained.get("closure_gap_rate", 0.0), baseline.get("closure_gap_rate", 0.0), as_percent=True)} |
-| Avg steps | {baseline.get("avg_steps", 0.0):.2f} | {trained.get("avg_steps", 0.0):.2f} | {delta_text(trained.get("avg_steps", 0.0), baseline.get("avg_steps", 0.0))} |
+| Success rate | {as_pct(baseline.get("success_rate", 0.0))} | {as_pct(trained.get("success_rate", 0.0))} | {delta_pct(trained.get("success_rate", 0.0), baseline.get("success_rate", 0.0))} |
+| Root-cause rate | {as_pct(baseline.get("root_cause_rate", 0.0))} | {as_pct(trained.get("root_cause_rate", 0.0))} | {delta_pct(trained.get("root_cause_rate", 0.0), baseline.get("root_cause_rate", 0.0))} |
+| Restore rate | {as_pct(baseline.get("restore_rate", 0.0))} | {as_pct(trained.get("restore_rate", 0.0))} | {delta_pct(trained.get("restore_rate", 0.0), baseline.get("restore_rate", 0.0))} |
+| Closure gap | {as_pct(baseline.get("closure_gap_rate", 0.0))} | {as_pct(trained.get("closure_gap_rate", 0.0))} | {delta_pct(trained.get("closure_gap_rate", 0.0), baseline.get("closure_gap_rate", 0.0))} |
+| Avg env reward | {baseline.get("avg_env_reward", 0.0):.4f} | {trained.get("avg_env_reward", 0.0):.4f} | {trained.get("avg_env_reward", 0.0) - baseline.get("avg_env_reward", 0.0):+.4f} |
+| Avg steps | {baseline.get("avg_steps", 0.0):.2f} | {trained.get("avg_steps", 0.0):.2f} | {trained.get("avg_steps", 0.0) - baseline.get("avg_steps", 0.0):+.2f} |
+
+### Harder profile (v2: robustness)
+
+| Metric | Baseline | Trained | Delta |
+|---|---:|---:|---:|
+| Success rate | {as_pct(v2_baseline.get("success_rate", 0.0))} | {as_pct(v2_trained.get("success_rate", 0.0))} | {delta_pct(v2_trained.get("success_rate", 0.0), v2_baseline.get("success_rate", 0.0))} |
+| Root-cause rate | {as_pct(v2_baseline.get("root_cause_rate", 0.0))} | {as_pct(v2_trained.get("root_cause_rate", 0.0))} | {delta_pct(v2_trained.get("root_cause_rate", 0.0), v2_baseline.get("root_cause_rate", 0.0))} |
+| Restore rate | {as_pct(v2_baseline.get("restore_rate", 0.0))} | {as_pct(v2_trained.get("restore_rate", 0.0))} | {delta_pct(v2_trained.get("restore_rate", 0.0), v2_baseline.get("restore_rate", 0.0))} |
+| Closure gap | {as_pct(v2_baseline.get("closure_gap_rate", 0.0))} | {as_pct(v2_trained.get("closure_gap_rate", 0.0))} | {delta_pct(v2_trained.get("closure_gap_rate", 0.0), v2_baseline.get("closure_gap_rate", 0.0))} |
 """
 
-links_md = f"""
-### Reproducibility links
-- Space: [{SPACE_URL}]({SPACE_URL})
-- Live application: [{APP_URL}]({APP_URL})
-- GitHub repo: [{GITHUB_URL}]({GITHUB_URL})
-- Colab notebook: [{COLAB_URL}]({COLAB_URL})
+repro_md = """
+## Reproducibility
 
-### RL command (official submission run: profile=v1)
+### RL run (official v1 packet)
 ```bash
 python colab/run_openincident_hackathon.py --task-id medium --episodes 30 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v1 --output-dir artifacts/colab_demo_v1
 ```
 
-### RL command (harder robustness run: profile=v2)
+### RL run (harder v2 packet)
 ```bash
 python colab/run_openincident_hackathon.py --task-id medium --episodes 80 --baseline-random 5 --policy epsilon --env-mode stochastic --env-profile v2 --output-dir artifacts/colab_demo_v2_tuned4_full
 ```
 
-### HF TRL command (minimum requirement path)
+### HF TRL minimum requirement run
 ```bash
 python colab/run_openincident_hf_trl_minimal.py --task-id medium --env-mode stochastic --env-profile v2 --episodes 80 --warmup-episodes 20 --model-id sshleifer/tiny-gpt2 --output-dir artifacts/trl_loss_proof
 ```
 """
 
 css = """
-.metric-card {
-  border: 1px solid #2a3550;
-  border-radius: 12px;
-  padding: 14px 16px;
-  background: linear-gradient(180deg, #121a2b, #0f1523);
-  min-height: 92px;
+:root {
+  --panel-bg: linear-gradient(180deg, #121a2b, #0b1020);
+  --text-main: #f2f7ff;
+  --text-dim: #9fb4d0;
+  --line: #27344f;
+  --cyan: #00d4ff;
+  --teal: #00e6b8;
+  --orange: #ff9a3d;
 }
-.card-title {
-  color: #9fb4d0;
+
+body {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(0, 212, 255, 0.15), transparent 35%),
+    radial-gradient(circle at 90% 15%, rgba(0, 230, 184, 0.15), transparent 35%),
+    #060913;
+}
+
+.hero {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(145deg, #0f1728, #081022);
+  padding: 22px;
+  margin-bottom: 10px;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.35);
+}
+.hero h1 {
+  margin: 6px 0 8px;
+  font-size: 46px;
+  line-height: 1.02;
+  color: var(--text-main);
+}
+.hero-badge {
+  display: inline-block;
+  border: 1px solid #2e4a66;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  color: #9fd7ff;
+  background: rgba(0, 212, 255, 0.08);
+}
+.hero-sub {
+  margin: 0;
+  color: #c8d9f0;
+  font-size: 16px;
+}
+.hero-story {
+  margin: 12px 0 0;
+  color: #a7bdd8;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.hero-links {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.hero-links a {
+  color: #0a0f1f;
+  background: linear-gradient(135deg, var(--cyan), #81f0ff);
+  text-decoration: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.hero-links a:nth-child(2) {
+  background: linear-gradient(135deg, var(--teal), #8fffe8);
+}
+.hero-links a:nth-child(3) {
+  background: linear-gradient(135deg, var(--orange), #ffc784);
+}
+.kpi {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--panel-bg);
+  min-height: 100px;
+}
+.kpi-title {
+  color: #8ea6c6;
   font-size: 12px;
   letter-spacing: 0.4px;
   text-transform: uppercase;
 }
-.card-value {
-  color: #f5f8ff;
-  font-size: 28px;
+.kpi-value {
+  color: var(--text-main);
+  font-size: 38px;
+  line-height: 1;
   font-weight: 700;
-  margin-top: 4px;
+  margin-top: 8px;
 }
-.card-hint {
-  color: #7d93b6;
-  font-size: 12px;
-  margin-top: 4px;
+.kpi-sub {
+  color: #9ab0ce;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.blue .kpi-value {
+  color: #7cd5ff;
+}
+.green .kpi-value {
+  color: #90ffd9;
+}
+.amber .kpi-value {
+  color: #ffd59f;
+}
+.pink .kpi-value {
+  color: #ffc4f2;
 }
 """
 
 with gr.Blocks(title="OpenIncident X", css=css) as demo:
-    gr.Markdown(header_md)
+    gr.HTML(hero_html)
 
     with gr.Row():
         gr.Markdown(
-            metric_card("Success Rate", percent(trained.get("success_rate", 0.0)), "trained policy"),
-            elem_id="success-card",
+            kpi_card(
+                "Success rate (v1 trained)",
+                as_pct_compact(trained.get("success_rate", 0.0)),
+                "Official judged packet",
+                tone="blue",
+            )
         )
         gr.Markdown(
-            metric_card("Root Cause Rate", percent(trained.get("root_cause_rate", 0.0)), "diagnosis quality"),
-            elem_id="root-card",
+            kpi_card(
+                "Root-cause rate (v1 trained)",
+                as_pct_compact(trained.get("root_cause_rate", 0.0)),
+                "Diagnosis quality",
+                tone="green",
+            )
         )
         gr.Markdown(
-            metric_card("Restore Rate", percent(trained.get("restore_rate", 0.0)), "service recovery"),
-            elem_id="restore-card",
+            kpi_card(
+                "Restore rate (v1 trained)",
+                as_pct_compact(trained.get("restore_rate", 0.0)),
+                "Service recovery",
+                tone="amber",
+            )
         )
         gr.Markdown(
-            metric_card("Closure Gap", percent(trained.get("closure_gap_rate", 0.0)), "lower is better"),
-            elem_id="gap-card",
+            kpi_card(
+                "Root-cause rate (v2 trained)",
+                as_pct_compact(v2_trained.get("root_cause_rate", 0.0)),
+                "Harder robustness profile",
+                tone="pink",
+            )
         )
 
     with gr.Tabs():
-        with gr.TabItem("Overview"):
-            gr.Markdown(overview_md)
+        with gr.TabItem("Mission & Story"):
+            gr.Markdown(story_md)
             gr.Markdown(
-                "### Honest caveat\n"
-                "This environment can still produce successful closure without perfect root-cause certainty. "
-                "The strongest safe claim is improved recovery and closure behavior."
+                "### Product flow shown in demo\n"
+                "Sign in -> Create project -> Run checks -> Open incident -> Triage -> Evidence-backed resolution"
             )
 
+        with gr.TabItem("Judge Checklist"):
+            gr.Markdown(requirements_md)
+
         with gr.TabItem("Results"):
-            gr.Markdown("### Baseline vs trained")
-            gr.Markdown(results_table_md)
-            if PLOT_PATH.exists():
-                gr.Image(value=str(PLOT_PATH), label="Reward Curve")
+            gr.Markdown(results_md)
+            if plot_v1.exists():
+                gr.Image(value=str(plot_v1), label="Reward curve (v1 official)")
             else:
                 gr.Markdown(
-                    "Reward plot missing. Expected one of: "
-                    "`artifacts/colab_demo_v1/medium_epsilon_rewards.png` "
-                    "or `artifacts/colab_demo/medium_epsilon_rewards.png`."
+                    "Reward plot missing at `artifacts/colab_demo_v1/medium_epsilon_rewards.png`."
                 )
-            if V2_PLOT_PATH.exists():
-                gr.Image(value=str(V2_PLOT_PATH), label="Reward Curve (v2 robustness)")
-            gr.Markdown("### Best successful trajectory")
-            gr.Code(value=str(trajectory_actions), language="json")
-            if trl_summary:
-                gr.Markdown("### Second result: HF TRL training run")
-                trl_brief = {
-                    "train_loss": trl_summary.get("train_loss"),
-                    "train_runtime": trl_summary.get("train_runtime"),
-                    "train_samples": trl_summary.get("train_samples"),
-                    "model_id": trl_summary.get("model_id"),
-                }
-                gr.JSON(value=trl_brief, label="HF TRL Result Snapshot")
+            if plot_v2.exists():
+                gr.Image(value=str(plot_v2), label="Reward curve (v2 harder profile)")
+            if plot_trl.exists():
+                gr.Image(value=str(plot_trl), label="TRL loss curve (v2)")
+            gr.Markdown("### Best successful trajectory (v1)")
+            gr.Code(value=str(actions), language="json")
 
         with gr.TabItem("Reproducibility"):
-            gr.Markdown(links_md)
-            if PLOT_PATH.exists():
-                gr.Markdown("### Primary reward curve")
-                gr.Image(value=str(PLOT_PATH), label="v1 reward plot")
-            if V2_PLOT_PATH.exists():
-                gr.Markdown("### Harder-world reward curve")
-                gr.Image(value=str(V2_PLOT_PATH), label="v2 reward plot")
+            gr.Markdown(repro_md)
             if dataset_summary:
-                gr.Markdown("### HF TRL dataset summary")
-                gr.JSON(value=dataset_summary, label="Dataset Summary")
+                gr.Markdown("### Dataset summary (HF TRL)")
+                gr.JSON(value=dataset_summary)
             if trl_summary:
-                gr.Markdown("### HF TRL training summary")
-                gr.JSON(value=trl_summary, label="TRL Summary")
+                gr.Markdown("### TRL training summary")
+                gr.JSON(value=trl_summary)
 
         with gr.TabItem("Raw Metrics"):
-            gr.JSON(value=metrics, label="RL Metrics JSON")
+            gr.Markdown("### v1 metrics JSON")
+            gr.JSON(value=v1)
+            if v2:
+                gr.Markdown("### v2 metrics JSON")
+                gr.JSON(value=v2)
 
 
 if __name__ == "__main__":
