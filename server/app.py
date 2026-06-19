@@ -296,6 +296,10 @@ def _require_project_access(
         project = session_store.get_project(project_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not project.metadata.get("owner_id"):
+        if account is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(status_code=403, detail="Forbidden: project has no owner")
     _ensure_project_access(project, account)
     return project, account
 
@@ -478,18 +482,17 @@ def reset_environment(request: SessionResetRequest | None = None) -> IncidentObs
 
 @app.post("/projects", response_model=ProjectConfig)
 def create_project(request: ProjectCreateRequest, authorization: str | None = Header(default=None)) -> ProjectConfig:
+    account = _require_account_from_header(authorization)
     repository_url = (request.repository_url or "").strip()
     if not repository_url:
         raise HTTPException(status_code=400, detail="Project creation requires a GitHub repository URL")
 
     metadata = dict(request.metadata)
-    if authorization is not None:
-        account = _require_account_from_header(authorization)
-        metadata.setdefault("owner_id", account.account_id)
-        metadata.setdefault("owner_name", account.name)
-        metadata.setdefault("owner_email", account.email)
-        if account.team:
-            metadata.setdefault("owner_team", account.team)
+    metadata["owner_id"] = account.account_id
+    metadata["owner_name"] = account.name
+    metadata["owner_email"] = account.email
+    if account.team:
+        metadata["owner_team"] = account.team
 
     payload = request.model_copy(
         update={
@@ -503,15 +506,8 @@ def create_project(request: ProjectCreateRequest, authorization: str | None = He
 
 @app.get("/projects", response_model=list[ProjectConfig])
 def list_projects(authorization: str | None = Header(default=None)) -> list[ProjectConfig]:
-    account = _optional_account_from_header(authorization)
-    projects = session_store.list_projects()
-    if account is None:
-        return [project for project in projects if not project.metadata.get("owner_id")]
-    return [
-        project
-        for project in projects
-        if not project.metadata.get("owner_id") or project.metadata.get("owner_id") == account.account_id
-    ]
+    account = _require_account_from_header(authorization)
+    return session_store.list_projects(owner_account_id=account.account_id)
 
 
 @app.get("/projects/{project_id}/endpoints", response_model=list[ProjectEndpoint])
