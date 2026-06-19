@@ -30,6 +30,8 @@ from models import (
     ProjectConfig,
     ProjectEnvironmentSummary,
     ProjectEvent,
+    ProjectJob,
+    ProjectJobStatus,
     ProjectGuardianTrainingDataset,
     ProjectLogBatchRequest,
     ProjectLogConnectorConfig,
@@ -115,6 +117,7 @@ class InMemorySessionStore:
         self._log_connectors: dict[str, ProjectLogConnectorConfig] = {}
         self._project_metrics: dict[str, list[ProjectMetricPoint]] = {}
         self._project_events: dict[str, list[ProjectEvent]] = {}
+        self._project_jobs: dict[str, ProjectJob] = {}
         self._project_agents: dict[str, list[AgentProfile]] = {}
         self._agent_coordination: dict[str, list[AgentCoordinationEntry]] = {}
         self._agent_conversations: dict[str, list[AgentConversationMessage]] = {}
@@ -266,6 +269,10 @@ class InMemorySessionStore:
             project_id: [ProjectEvent.model_validate(entry_payload) for entry_payload in entries]
             for project_id, entries in raw_payload.get("project_events", {}).items()
         }
+        self._project_jobs = {
+            job_id: ProjectJob.model_validate(payload)
+            for job_id, payload in raw_payload.get("project_jobs", {}).items()
+        }
         self._project_agents = {
             project_id: [AgentProfile.model_validate(entry_payload) for entry_payload in entries]
             for project_id, entries in raw_payload.get("project_agents", {}).items()
@@ -370,6 +377,10 @@ class InMemorySessionStore:
             "project_events": {
                 project_id: [entry.model_dump(mode="json") for entry in entries]
                 for project_id, entries in self._project_events.items()
+            },
+            "project_jobs": {
+                job_id: job.model_dump(mode="json")
+                for job_id, job in self._project_jobs.items()
             },
             "project_agents": {
                 project_id: [entry.model_dump(mode="json") for entry in entries]
@@ -812,6 +823,93 @@ class InMemorySessionStore:
         if persist:
             self._save()
         return event
+
+    def create_project_job(self, project_id: str, job_type: str, summary: str = "") -> ProjectJob:
+        self.get_project(project_id)
+        job = ProjectJob(
+            job_id=uuid4().hex,
+            project_id=project_id,
+            job_type=job_type,
+            status=ProjectJobStatus.QUEUED,
+            summary=summary or f"{job_type} queued.",
+        )
+        self._project_jobs[job.job_id] = job
+        self._record_event(
+            project_id,
+            event_type="project_job_queued",
+            title="Project job queued",
+            message=job.summary,
+            severity="info",
+            source="jobs",
+            metadata={"job_id": job.job_id, "job_type": job.job_type, "status": job.status.value},
+            persist=False,
+        )
+        self._save()
+        return job
+
+    def get_project_job(self, job_id: str) -> ProjectJob:
+        try:
+            return self._project_jobs[job_id]
+        except KeyError as exc:
+            raise KeyError(f"No project job found for job_id: {job_id}") from exc
+
+    def list_project_jobs(self, project_id: str, limit: int | None = None) -> list[ProjectJob]:
+        self.get_project(project_id)
+        jobs = sorted(
+            [job for job in self._project_jobs.values() if job.project_id == project_id],
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+        return jobs[:limit] if limit is not None else jobs
+
+    def mark_project_job_running(self, job_id: str, summary: str | None = None) -> ProjectJob:
+        job = self.get_project_job(job_id)
+        job.status = ProjectJobStatus.RUNNING
+        job.started_at = datetime.now(timezone.utc)
+        if summary:
+            job.summary = summary
+        self._project_jobs[job_id] = job
+        self._record_event(
+            job.project_id,
+            event_type="project_job_started",
+            title="Project job started",
+            message=job.summary,
+            severity="info",
+            source="jobs",
+            metadata={"job_id": job.job_id, "job_type": job.job_type, "status": job.status.value},
+            persist=False,
+        )
+        self._save()
+        return job
+
+    def complete_project_job(
+        self,
+        job_id: str,
+        *,
+        success: bool,
+        summary: str,
+        result: dict | None = None,
+        error_message: str | None = None,
+    ) -> ProjectJob:
+        job = self.get_project_job(job_id)
+        job.status = ProjectJobStatus.SUCCEEDED if success else ProjectJobStatus.FAILED
+        job.summary = summary
+        job.error_message = error_message
+        job.result = result or {}
+        job.completed_at = datetime.now(timezone.utc)
+        self._project_jobs[job_id] = job
+        self._record_event(
+            job.project_id,
+            event_type="project_job_completed",
+            title="Project job completed" if success else "Project job failed",
+            message=summary,
+            severity="info" if success else "error",
+            source="jobs",
+            metadata={"job_id": job.job_id, "job_type": job.job_type, "status": job.status.value},
+            persist=False,
+        )
+        self._save()
+        return job
 
     def _record_agent_handoff(
         self,

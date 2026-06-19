@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -16,6 +17,72 @@ from models import (
     TestEnvironmentRunResult,
 )
 from server.github_repo import discover_frontend_surface_from_workspace
+
+
+_SHELL_CONTROL_PATTERN = re.compile(r"(&&|\|\||[;|<>])")
+_DANGEROUS_COMMAND_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\brm\s+(-[^\s]*r|/[sS])",
+        r"\brmdir\s+(/[sS]|-[^\s]*r)",
+        r"\bRemove-Item\b.*(?:-Recurse|-r)\b",
+        r"\bdel\s+(/[sS]|/[qQ])",
+        r"\berase\s+(/[sS]|/[qQ])",
+        r"\bgit\s+reset\s+--hard\b",
+        r"\bgit\s+clean\b",
+        r"\bformat\b",
+        r"\bmkfs\b",
+        r"\bdiskpart\b",
+        r"\bshutdown\b",
+        r"\breboot\b",
+        r"\bRestart-Computer\b",
+        r"\breg\s+delete\b",
+        r"\bsc\s+delete\b",
+    )
+]
+
+
+def validate_test_environment_command(command: str, *, label: str = "command") -> list[str]:
+    issues: list[str] = []
+    normalized = command.strip()
+    if not normalized:
+        return issues
+    if "\n" in normalized or "\r" in normalized:
+        issues.append(f"{label} must be a single-line command.")
+    if _SHELL_CONTROL_PATTERN.search(normalized):
+        issues.append(
+            f"{label} cannot contain shell control operators such as pipes, redirects, semicolons, &&, or ||."
+        )
+    for pattern in _DANGEROUS_COMMAND_PATTERNS:
+        if pattern.search(normalized):
+            issues.append(f"{label} looks destructive or host-mutating and cannot run in the test environment.")
+            break
+    return issues
+
+
+def validate_test_environment_commands(
+    *,
+    install_command: str | None = None,
+    test_command: str | None = None,
+) -> list[str]:
+    issues: list[str] = []
+    if install_command:
+        issues.extend(validate_test_environment_command(install_command, label="install_command"))
+    if test_command:
+        issues.extend(validate_test_environment_command(test_command, label="test_command"))
+    return issues
+
+
+def _safe_workspace_child(workspace: Path, workdir: str | None) -> Path:
+    workspace_root = workspace.resolve()
+    if not workdir:
+        return workspace_root
+    candidate = (workspace_root / workdir).resolve()
+    try:
+        candidate.relative_to(workspace_root)
+    except ValueError as exc:
+        raise ValueError("Configured workdir must stay inside the prepared repository workspace.") from exc
+    return candidate
 
 
 def inspect_workspace(
@@ -169,9 +236,7 @@ def prepare_workspace(
             subprocess.run(["git", "-C", str(workspace), "checkout", target], check=True, capture_output=True, text=True, timeout=timeout_seconds)
             subprocess.run(["git", "-C", str(workspace), "pull", "--ff-only"], check=True, capture_output=True, text=True, timeout=timeout_seconds)
 
-    if config.workdir:
-        return workspace / config.workdir
-    return workspace
+    return _safe_workspace_child(workspace, config.workdir)
 
 
 def run_shell_command(
@@ -218,6 +283,27 @@ def run_test_environment(
     base_dir: str | Path = "data/test_envs",
 ) -> TestEnvironmentRunResult:
     started_at = datetime.now(timezone.utc)
+    install_command = request.install_command_override or config.install_command
+    test_command = request.test_command_override or config.test_command
+    command_issues = validate_test_environment_commands(
+        install_command=install_command if request.run_install else None,
+        test_command=test_command if request.run_tests else None,
+    )
+    if command_issues:
+        return TestEnvironmentRunResult(
+            project_id=config.project_id,
+            repository_url=config.repository_url,
+            branch=config.branch,
+            workspace_path="",
+            pull_latest=request.pull_latest,
+            run_install=request.run_install,
+            run_tests=request.run_tests,
+            success=False,
+            summary="Testing environment command safety validation failed: " + " ".join(command_issues),
+            started_at=started_at,
+            completed_at=datetime.now(timezone.utc),
+        )
+
     workspace = prepare_workspace(
         config,
         base_dir=base_dir,
@@ -229,9 +315,6 @@ def run_test_environment(
     test_result = None
     summary = "Testing environment completed."
     success = True
-
-    install_command = request.install_command_override or config.install_command
-    test_command = request.test_command_override or config.test_command
 
     if request.run_install and install_command:
         install_result = run_shell_command(

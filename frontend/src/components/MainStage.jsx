@@ -87,6 +87,8 @@ export function MainStage({
   summary,
   plannerSummary,
   environmentSummary,
+  projectJobs = [],
+  generatedTestPlan,
   trainingDatasets,
   stageView,
   setStageView,
@@ -104,6 +106,7 @@ export function MainStage({
   runBrowserSmoke,
   runApiSmoke,
   runDiagnosticSweep,
+  runGeneratedTests,
   runPredeployGate,
   runMissionControl,
   triageFirstIncident,
@@ -148,9 +151,12 @@ export function MainStage({
   const metricSummary = summary?.metric_summary;
   const latestMetricEntries = Object.entries(metricSummary?.latest_values || {}).slice(0, 4);
   const storyReport = summary?.story_report;
+  const generatedCases = generatedTestPlan?.cases || [];
   const plannerBreakdown = plannerSummary?.domain_breakdown || [];
   const plannerTopStories = plannerSummary?.stories?.slice(0, 4) || [];
   const environmentActions = environmentSummary?.next_actions || [];
+  const latestProjectJob = projectJobs[0] || null;
+  const activeProjectJob = projectJobs.find((job) => ["queued", "running"].includes(job.status));
   const trainingCards = summarizeTrainingDatasets(trainingDatasets);
   const hasTrainingData = trainingCards.some((item) => item.total > 0);
   const strongestTrainingCard = [...trainingCards].sort((a, b) => b.total - a.total)[0];
@@ -311,7 +317,8 @@ export function MainStage({
   ];
   const setupConnected = Boolean(selectedProject?.repository_url && (productionUrl || apiBaseUrl));
   const environmentReady = Boolean(environmentSummary?.workspace_ready || frontendDiscovery?.routes?.length);
-  const storyValidated = Boolean(storyReport?.completed_stories || storyReport?.failed_stories || storyReport?.blocked_stories);
+  const generatedPlanReady = Boolean(generatedTestPlan?.total_cases);
+  const generatedExecutionReady = Boolean(storyReport?.completed_stories || storyReport?.failed_stories || storyReport?.blocked_stories);
   const investigationReady = Boolean(activeRuns.length || logs.length || logSummary?.total_entries || recentEvidenceEvents.length);
   const gateReady = Boolean(predeployResult);
   const improvementReady = Boolean(hasTrainingData);
@@ -336,14 +343,23 @@ export function MainStage({
       busyKey: environmentSummary?.workspace_ready ? "discover" : "workspace",
     },
     {
-      key: "test",
-      label: "Test",
-      title: "Run story validation",
-      done: storyValidated,
-      description: "Execute the demo story/testcase flow and let agents produce evidence.",
-      actionLabel: "Run demo flow",
-      action: launchDemoFlow,
-      busyKey: "demoFlow",
+      key: "generate",
+      label: "Generate",
+      title: "Generate test plan",
+      done: generatedPlanReady,
+      description: "Import user stories or QA test cases, then review the generated browser/API/manual plan.",
+      actionLabel: "Open execution",
+      action: () => setStageView("execution"),
+    },
+    {
+      key: "execute",
+      label: "Execute",
+      title: "Execute generated plan",
+      done: generatedExecutionReady,
+      description: "Run the automation-ready generated tests as a job and collect story results, failures, and incidents.",
+      actionLabel: "Execute generated plan",
+      action: runGeneratedTests,
+      busyKey: "generatedTests",
     },
     {
       key: "investigate",
@@ -378,19 +394,20 @@ export function MainStage({
   const currentWorkflowStep = workflowSteps.find((item) => !item.done) || workflowSteps[workflowSteps.length - 1];
   const currentWorkflowIndex = workflowSteps.findIndex((item) => item.key === currentWorkflowStep.key);
   const workflowProgress = Math.round((workflowSteps.filter((item) => item.done).length / workflowSteps.length) * 100);
+  const readinessItems = [
+    ["Repo", selectedProject?.repository_url ? "Linked" : "Missing", Boolean(selectedProject?.repository_url)],
+    ["Workspace", environmentSummary?.workspace_ready ? "Ready" : "Pending", Boolean(environmentSummary?.workspace_ready)],
+    ["Generated", generatedTestPlan ? `${generatedTestPlan.automated_cases}/${generatedTestPlan.total_cases}` : "No plan", generatedPlanReady],
+    ["Latest job", latestProjectJob ? latestProjectJob.status : "None", latestProjectJob?.status === "succeeded"],
+    ["Incidents", `${activeRuns.length}`, activeRuns.length === 0],
+    ["Gate", predeployResult ? (predeployResult.release_ready ? "Ready" : "Blocked") : "Not run", Boolean(predeployResult?.release_ready)],
+  ];
 
   return (
     <main className="ox-main">
-      <section className="stage-tabs">
-        <button className={stageView === "overview" ? "active" : ""} onClick={() => setStageView("overview")} type="button">Overview</button>
-        <button className={stageView === "execution" ? "active" : ""} onClick={() => setStageView("execution")} type="button">Execution</button>
-        <button className={stageView === "evidence" ? "active" : ""} onClick={() => setStageView("evidence")} type="button">Evidence</button>
-        <button className={stageView === "training" ? "active" : ""} onClick={() => setStageView("training")} type="button">Training</button>
-      </section>
-
       <section className="guided-workflow">
         <div className="guided-workflow-main">
-          <p className="ox-label">Guided Prototype Workflow</p>
+          <p className="ox-label">Backend Workflow Runway</p>
           <h2>{currentWorkflowStep.title}</h2>
           <p>{currentWorkflowStep.description}</p>
           <div className="guided-workflow-actions">
@@ -423,6 +440,15 @@ export function MainStage({
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="readiness-strip">
+        {readinessItems.map(([label, value, ok]) => (
+          <article className={ok ? "readiness-item ready" : "readiness-item"} key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
       </section>
 
       <section className="project-hero">
@@ -571,6 +597,14 @@ export function MainStage({
                 </div>
                 <div className="environment-command-list">
                   <div className="environment-command">
+                    <span>Latest job</span>
+                    <strong>
+                      {latestProjectJob
+                        ? `${latestProjectJob.job_type}: ${latestProjectJob.status}`
+                        : "No jobs queued"}
+                    </strong>
+                  </div>
+                  <div className="environment-command">
                     <span>Install</span>
                     <strong>{environmentSummary.recommended_install_command || "Not inferred"}</strong>
                   </div>
@@ -580,6 +614,11 @@ export function MainStage({
                   </div>
                 </div>
                 <div className="planner-actions environment-actions">
+                  {activeProjectJob ? (
+                    <span className="planner-pill environment-pill">
+                      {activeProjectJob.status === "queued" ? "Job queued" : "Job running"}
+                    </span>
+                  ) : null}
                   {environmentActions.slice(0, 3).map((item) => (
                     <span className="planner-pill environment-pill" key={item}>{item}</span>
                   ))}
@@ -629,6 +668,61 @@ export function MainStage({
               <div className="signal-row"><span>Story progress</span><strong>{storyReport ? `${storyReport.completed_stories}/${storyReport.total_stories}` : "0/0"}</strong></div>
               <div className="signal-row"><span>Workspace context</span><strong>{environmentSummary?.workspace_ready ? "Ready" : "Pending"}</strong></div>
               <div className="signal-row"><span>Planner priorities</span><strong>{plannerTopStories.length}</strong></div>
+            </article>
+
+            <article className="overview-card generated-tests-card">
+              <header>
+                <h2>Generated Test Plan</h2>
+                <span>{generatedTestPlan ? `${generatedTestPlan.automated_cases}/${generatedTestPlan.total_cases} automated` : "No plan"}</span>
+              </header>
+              {generatedTestPlan ? (
+                <>
+                  <div className="generated-test-stats">
+                    <div><span>Browser</span><strong>{generatedTestPlan.browser_cases || 0}</strong></div>
+                    <div><span>API</span><strong>{generatedTestPlan.api_cases || 0}</strong></div>
+                    <div><span>Manual</span><strong>{generatedTestPlan.manual_cases || 0}</strong></div>
+                    <div><span>Blocked</span><strong>{generatedTestPlan.blocked_cases || 0}</strong></div>
+                  </div>
+                  <div className="generated-test-list">
+                    {generatedCases.slice(0, 4).map((testCase) => (
+                      <button
+                        className="generated-test-row"
+                        key={testCase.test_id}
+                        onClick={() => setDetailPanel({
+                          title: "Generated test case",
+                          subtitle: testCase.title,
+                          groups: [{
+                            id: testCase.test_id,
+                            title: `${testCase.test_type} via ${testCase.agent_role}`,
+                            rows: [
+                              ["Target", testCase.target_path || "manual"],
+                              ["Method", testCase.method || "n/a"],
+                              ["Expected status", testCase.expected_status || "n/a"],
+                              ["Expected text", testCase.expected_text || "n/a"],
+                              ["Automation", testCase.automation_ready ? "ready" : "blocked"],
+                              ["Blocked reason", testCase.blocked_reason || "none"],
+                            ],
+                          }],
+                        })}
+                        type="button"
+                      >
+                        <span>{testCase.test_type}</span>
+                        <strong>{testCase.title}</strong>
+                        <em>{testCase.automation_ready ? "ready" : "blocked"}</em>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={runGeneratedTests}
+                    disabled={!generatedTestPlan.automated_cases || busy.generatedTests}
+                    type="button"
+                  >
+                    {busy.generatedTests ? "Queueing..." : "Execute generated plan"}
+                  </button>
+                </>
+              ) : (
+                <p className="muted">Import stories to generate browser, API, and manual validation cases.</p>
+              )}
             </article>
           </section>
 

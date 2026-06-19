@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from time import perf_counter
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -55,7 +55,9 @@ from models import (
     ProjectApiTrainingDataset,
     ProjectEnvironmentSummary,
     ProjectFrontendTrainingDataset,
+    ProjectGeneratedTestPlan,
     ProjectGuardianTrainingDataset,
+    ProjectJob,
     ProjectObservabilityTrainingDataset,
     ProjectOversightTrainingDataset,
     ProjectStoryReport,
@@ -74,6 +76,7 @@ from models import (
     SessionStepResult,
     StoryDomain,
     StoryStatus,
+    StoryTestType,
     StepResult,
     ProjectValidationSnapshot,
     TestEnvironmentConfig,
@@ -98,8 +101,8 @@ from server.github_repo import (
     inspect_repository_for_story,
 )
 from server.session_store import InMemorySessionStore
-from server.story_engine import execute_api_story, execute_frontend_story
-from server.test_environment import run_test_environment
+from server.story_engine import build_generated_test_plan, execute_api_story, execute_frontend_story
+from server.test_environment import run_test_environment, validate_test_environment_commands
 from server.triage import build_run_triage
 
 
@@ -728,6 +731,12 @@ def set_project_test_environment(
     authorization: str | None = Header(default=None),
 ) -> TestEnvironmentConfig:
     _require_project_access(project_id, authorization)
+    command_issues = validate_test_environment_commands(
+        install_command=request.install_command,
+        test_command=request.test_command,
+    )
+    if command_issues:
+        raise HTTPException(status_code=400, detail=command_issues)
     try:
         return session_store.set_test_environment_config(project_id, request)
     except KeyError as exc:
@@ -755,13 +764,7 @@ def list_project_test_environment_runs(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.post("/projects/{project_id}/testing/environment/run", response_model=TestEnvironmentRunResult)
-def run_project_test_environment(
-    project_id: str,
-    request: TestEnvironmentRunRequest,
-    authorization: str | None = Header(default=None),
-) -> TestEnvironmentRunResult:
-    _require_project_access(project_id, authorization)
+def _execute_test_environment_run(project_id: str, request: TestEnvironmentRunRequest) -> TestEnvironmentRunResult:
     try:
         config = session_store.get_test_environment_config(project_id)
     except KeyError as exc:
@@ -771,6 +774,12 @@ def run_project_test_environment(
         raise HTTPException(status_code=400, detail="Testing environment is disabled for this project")
     if not config.repository_url:
         raise HTTPException(status_code=400, detail="Testing environment requires a repository_url")
+    command_issues = validate_test_environment_commands(
+        install_command=(request.install_command_override or config.install_command) if request.run_install else None,
+        test_command=(request.test_command_override or config.test_command) if request.run_tests else None,
+    )
+    if command_issues:
+        raise HTTPException(status_code=400, detail=command_issues)
 
     try:
         result = run_test_environment(config, request)
@@ -788,6 +797,180 @@ def run_project_test_environment(
         result.linked_session_id = session.session_id
 
     return session_store.add_test_environment_run(project_id, result)
+
+
+def _run_test_environment_job(job_id: str, project_id: str, request: TestEnvironmentRunRequest) -> None:
+    session_store.mark_project_job_running(job_id, "Repository test environment job is running.")
+    try:
+        result = _execute_test_environment_run(project_id, request)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        session_store.complete_project_job(
+            job_id,
+            success=False,
+            summary=f"Repository test environment job failed: {detail}",
+            error_message=detail,
+        )
+        return
+    except Exception as exc:
+        session_store.complete_project_job(
+            job_id,
+            success=False,
+            summary=f"Repository test environment job failed: {exc}",
+            error_message=str(exc),
+        )
+        return
+
+    session_store.complete_project_job(
+        job_id,
+        success=result.success,
+        summary=result.summary,
+        result={"test_environment_run": result.model_dump(mode="json")},
+        error_message=None if result.success else result.summary,
+    )
+
+
+def _run_generated_test_plan_job(job_id: str, project_id: str, authorization: str | None) -> None:
+    session_store.mark_project_job_running(job_id, "Generated test plan job is running.")
+    try:
+        project, _ = _require_project_access(project_id, authorization)
+        stories = session_store.list_project_stories(project_id)
+        analyzed_stories: list[UserStoryRecord] = []
+        for story in stories:
+            if story.analysis is None:
+                story = session_store.analyze_story(story.story_id)
+            analyzed_stories.append(story)
+
+        workspace_path = session_store.get_latest_test_environment_workspace(project_id)
+        plan = build_generated_test_plan(project, analyzed_stories, workspace_path=workspace_path)
+        executable_story_ids = {
+            item.story_id
+            for item in plan.cases
+            if item.automation_ready and item.test_type in {StoryTestType.BROWSER, StoryTestType.API}
+        }
+
+        results: list[UserStoryExecutionResult] = []
+        for story_id in executable_story_ids:
+            results.append(_execute_project_story_internal(story_id, authorization))
+
+        passed = sum(1 for item in results if item.success)
+        failed = sum(1 for item in results if not item.success)
+        skipped = plan.total_cases - len(results)
+        summary = (
+            f"Generated test plan executed {len(results)} automated case(s): "
+            f"{passed} passed, {failed} failed, {skipped} skipped."
+        )
+        session_store.complete_project_job(
+            job_id,
+            success=failed == 0,
+            summary=summary,
+            result={
+                "generated_test_plan": plan.model_dump(mode="json"),
+                "story_results": [item.model_dump(mode="json") for item in results],
+                "executed_cases": len(results),
+                "passed_cases": passed,
+                "failed_cases": failed,
+                "skipped_cases": skipped,
+            },
+            error_message=None if failed == 0 else summary,
+        )
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        session_store.complete_project_job(
+            job_id,
+            success=False,
+            summary=f"Generated test plan job failed: {detail}",
+            error_message=detail,
+        )
+    except Exception as exc:
+        session_store.complete_project_job(
+            job_id,
+            success=False,
+            summary=f"Generated test plan job failed: {exc}",
+            error_message=str(exc),
+        )
+
+
+@app.post("/projects/{project_id}/jobs/test-environment", response_model=ProjectJob)
+def queue_project_test_environment_job(
+    project_id: str,
+    request: TestEnvironmentRunRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+) -> ProjectJob:
+    _require_project_access(project_id, authorization)
+    try:
+        config = session_store.get_test_environment_config(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not config.enabled:
+        raise HTTPException(status_code=400, detail="Testing environment is disabled for this project")
+    if not config.repository_url:
+        raise HTTPException(status_code=400, detail="Testing environment requires a repository_url")
+    command_issues = validate_test_environment_commands(
+        install_command=(request.install_command_override or config.install_command) if request.run_install else None,
+        test_command=(request.test_command_override or config.test_command) if request.run_tests else None,
+    )
+    if command_issues:
+        raise HTTPException(status_code=400, detail=command_issues)
+
+    job = session_store.create_project_job(
+        project_id,
+        job_type="test_environment",
+        summary="Repository test environment job queued.",
+    )
+    background_tasks.add_task(_run_test_environment_job, job.job_id, project_id, request)
+    return job
+
+
+@app.post("/projects/{project_id}/jobs/generated-tests", response_model=ProjectJob)
+def queue_project_generated_tests_job(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+) -> ProjectJob:
+    _require_project_access(project_id, authorization)
+    stories = session_store.list_project_stories(project_id)
+    if not stories:
+        raise HTTPException(status_code=400, detail="Import stories or test cases before executing a generated test plan")
+
+    job = session_store.create_project_job(
+        project_id,
+        job_type="generated_tests",
+        summary="Generated test plan execution job queued.",
+    )
+    background_tasks.add_task(_run_generated_test_plan_job, job.job_id, project_id, authorization)
+    return job
+
+
+@app.get("/projects/{project_id}/jobs", response_model=list[ProjectJob])
+def list_project_jobs(
+    project_id: str,
+    limit: int = 25,
+    authorization: str | None = Header(default=None),
+) -> list[ProjectJob]:
+    _require_project_access(project_id, authorization)
+    return session_store.list_project_jobs(project_id, limit=limit)
+
+
+@app.get("/jobs/{job_id}", response_model=ProjectJob)
+def get_project_job(job_id: str, authorization: str | None = Header(default=None)) -> ProjectJob:
+    try:
+        job = session_store.get_project_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _require_project_access(job.project_id, authorization)
+    return job
+
+
+@app.post("/projects/{project_id}/testing/environment/run", response_model=TestEnvironmentRunResult)
+def run_project_test_environment(
+    project_id: str,
+    request: TestEnvironmentRunRequest,
+    authorization: str | None = Header(default=None),
+) -> TestEnvironmentRunResult:
+    _require_project_access(project_id, authorization)
+    return _execute_test_environment_run(project_id, request)
 
 
 @app.get("/projects/{project_id}/repo/inspect", response_model=RepoInspectionResult)
@@ -968,6 +1151,25 @@ def get_project_story_report(project_id: str, authorization: str | None = Header
         return session_store.build_story_report(project_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/projects/{project_id}/generated-tests", response_model=ProjectGeneratedTestPlan)
+def get_project_generated_tests(
+    project_id: str,
+    authorization: str | None = Header(default=None),
+) -> ProjectGeneratedTestPlan:
+    project, _ = _require_project_access(project_id, authorization)
+    stories = session_store.list_project_stories(project_id)
+    analyzed_stories: list[UserStoryRecord] = []
+    for story in stories:
+        if story.analysis is None:
+            try:
+                story = session_store.analyze_story(story.story_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+        analyzed_stories.append(story)
+    workspace_path = session_store.get_latest_test_environment_workspace(project_id)
+    return build_generated_test_plan(project, analyzed_stories, workspace_path=workspace_path)
 
 
 @app.get("/projects/{project_id}/planner-summary", response_model=ProjectPlannerSummary)

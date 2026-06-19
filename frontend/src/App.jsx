@@ -147,6 +147,8 @@ export default function App() {
   const [summary, setSummary] = useState(null);
   const [plannerSummary, setPlannerSummary] = useState(null);
   const [environmentSummary, setEnvironmentSummary] = useState(null);
+  const [projectJobs, setProjectJobs] = useState([]);
+  const [generatedTestPlan, setGeneratedTestPlan] = useState(null);
   const [trainingDatasets, setTrainingDatasets] = useState({});
   const [frontendDiscovery, setFrontendDiscovery] = useState(null);
   const [latestCheck, setLatestCheck] = useState(null);
@@ -320,6 +322,8 @@ export default function App() {
       storyItems,
       logItems,
       logDigest,
+      projectJobItems,
+      generatedTests,
       plannerTraining,
       frontendTraining,
       apiTraining,
@@ -334,6 +338,8 @@ export default function App() {
       apiRequest(`/projects/${projectId}/stories`).catch(() => []),
       apiRequest(`/projects/${projectId}/logs`).catch(() => []),
       apiRequest(`/projects/${projectId}/logs/summary`).catch(() => null),
+      apiRequest(`/projects/${projectId}/jobs`).catch(() => []),
+      apiRequest(`/projects/${projectId}/generated-tests`).catch(() => null),
       apiRequest(`/projects/${projectId}/planner-training-dataset`).catch(() => null),
       apiRequest(`/projects/${projectId}/frontend-training-dataset`).catch(() => null),
       apiRequest(`/projects/${projectId}/api-training-dataset`).catch(() => null),
@@ -345,6 +351,8 @@ export default function App() {
     setSummary(summaryData);
     setPlannerSummary(plannerData);
     setEnvironmentSummary(environmentData);
+    setProjectJobs(projectJobItems);
+    setGeneratedTestPlan(generatedTests);
     setTrainingDatasets({
       planner: plannerTraining,
       frontend: frontendTraining,
@@ -449,11 +457,12 @@ export default function App() {
           env: {},
         }),
       });
-      const result = await apiRequest(`/projects/${selectedProject.project_id}/testing/environment/run`, {
+      const job = await apiRequest(`/projects/${selectedProject.project_id}/jobs/test-environment`, {
         method: "POST",
         body: JSON.stringify({ pull_latest: true, run_install: false, run_tests: false, timeout_seconds: 300 }),
       });
-      setMessage(`Workspace ready: ${result.workspace_path}`);
+      setProjectJobs((current) => [job, ...current.filter((item) => item.job_id !== job.job_id)]);
+      setMessage(`Workspace job queued: ${job.job_id.slice(0, 8)}.`);
       await refreshSummary(selectedProject.project_id);
     });
   }
@@ -479,6 +488,22 @@ export default function App() {
         method: "POST",
       });
       setMessage(`Health check ${result.status}: ${result.error_message || result.target_url}`);
+      await refreshSummary(selectedProject.project_id);
+    });
+  }
+
+  async function runGeneratedTests() {
+    if (!selectedProject) return;
+    if (!generatedTestPlan?.total_cases) {
+      setMessage("Import stories or test cases before executing the generated plan.");
+      return;
+    }
+    await runTask("generatedTests", async () => {
+      const job = await apiRequest(`/projects/${selectedProject.project_id}/jobs/generated-tests`, {
+        method: "POST",
+      });
+      setProjectJobs((current) => [job, ...current.filter((item) => item.job_id !== job.job_id)]);
+      setMessage(`Generated test execution queued: ${job.job_id.slice(0, 8)}.`);
       await refreshSummary(selectedProject.project_id);
     });
   }
@@ -1084,6 +1109,8 @@ export default function App() {
     setSummary(null);
     setPlannerSummary(null);
     setEnvironmentSummary(null);
+    setProjectJobs([]);
+    setGeneratedTestPlan(null);
     setTrainingDatasets({});
     setFrontendDiscovery(null);
     setStories([]);
@@ -1155,6 +1182,14 @@ export default function App() {
     });
   }, [dashboardOpen, selectedProject]);
 
+  useEffect(() => {
+    if (!selectedProjectId || !projectJobs.some((job) => ["queued", "running"].includes(job.status))) return;
+    const timer = setInterval(() => {
+      refreshSummary(selectedProjectId).catch((error) => setMessage(error.message));
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [selectedProjectId, projectJobs]);
+
   if (!account || !dashboardOpen || !selectedProject) {
     return (
       <ProjectLaunch
@@ -1221,6 +1256,8 @@ export default function App() {
         summary={summary}
         plannerSummary={plannerSummary}
         environmentSummary={environmentSummary}
+        projectJobs={projectJobs}
+        generatedTestPlan={generatedTestPlan}
         trainingDatasets={trainingDatasets}
         stageView={stageView}
         setStageView={setStageView}
@@ -1238,6 +1275,7 @@ export default function App() {
         runBrowserSmoke={runBrowserSmoke}
         runApiSmoke={runApiSmoke}
         runDiagnosticSweep={runDiagnosticSweep}
+        runGeneratedTests={runGeneratedTests}
         runPredeployGate={runPredeployGate}
         runMissionControl={runMissionControl}
         triageFirstIncident={triageFirstIncident}
@@ -1272,6 +1310,7 @@ export default function App() {
         projectSummary={summary}
         plannerSummary={plannerSummary}
         environmentSummary={environmentSummary}
+        generatedTestPlan={generatedTestPlan}
         trainingDatasets={trainingDatasets}
         message={message}
         applyStoryTemplate={applyStoryTemplate}

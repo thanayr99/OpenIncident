@@ -9,11 +9,13 @@ from models import (
     ApiTrainingRecord,
     FrontendStoryTestPlan,
     FrontendTrainingRecord,
+    GeneratedTestCase,
     PlannerDecisionRecord,
     ProjectApiTrainingDataset,
     PlannerDomainBreakdown,
     ProjectBrowserCheckRequest,
     ProjectConfig,
+    ProjectGeneratedTestPlan,
     ProjectFrontendTrainingDataset,
     ProjectPlannerSummary,
     ProjectPlannerTrainingDataset,
@@ -605,6 +607,147 @@ def build_api_training_dataset(project_id: str, stories: list[UserStoryRecord]) 
         explicit_hint_rate=round(explicit_hint_count / len(records), 4) if records else 0.0,
         status_match_rate=round(status_match_count / status_match_checks, 4) if status_match_checks else 0.0,
         records=records,
+    )
+
+
+def _generated_test_id(story: UserStoryRecord, test_type: StoryTestType) -> str:
+    return f"{story.story_id}:{test_type.value}"
+
+
+def _acceptance_assertions(story: UserStoryRecord) -> list[str]:
+    if story.acceptance_criteria:
+        return [f"Acceptance criterion holds: {item}" for item in story.acceptance_criteria]
+    return [f"Story outcome is satisfied: {story.title}"]
+
+
+def _manual_generated_case(story: UserStoryRecord, reason: str) -> GeneratedTestCase:
+    analysis = story.analysis or analyze_story(story)
+    return GeneratedTestCase(
+        test_id=_generated_test_id(story, StoryTestType.MANUAL_REVIEW),
+        story_id=story.story_id,
+        project_id=story.project_id,
+        title=story.title,
+        domain=analysis.primary_domain,
+        test_type=StoryTestType.MANUAL_REVIEW,
+        priority=analysis.execution_priority,
+        agent_role=analysis.assigned_agent,
+        steps=[
+            "Review the story and acceptance criteria.",
+            "Identify the missing connector, fixture, or runtime dependency.",
+            "Record manual validation evidence or add automation hints.",
+        ],
+        assertions=_acceptance_assertions(story),
+        automation_ready=False,
+        blocked_reason=reason,
+        reasoning=analysis.reasoning,
+    )
+
+
+def build_generated_test_plan(
+    project: ProjectConfig,
+    stories: list[UserStoryRecord],
+    *,
+    workspace_path: str | None = None,
+) -> ProjectGeneratedTestPlan:
+    cases: list[GeneratedTestCase] = []
+    for story in stories:
+        analysis = story.analysis or analyze_story(story)
+        primary_domain = analysis.primary_domain
+
+        if primary_domain in {StoryDomain.FRONTEND, StoryDomain.AUTH} or analysis.assigned_agent == AgentRole.FRONTEND_TESTER:
+            frontend_plan = build_frontend_story_plan(project, story, workspace_path=workspace_path)
+            target_path = story.hints.path or frontend_plan.inferred_route or infer_story_path(story) or "/"
+            expected_text = story.hints.expected_text or frontend_plan.expected_text
+            expected_selector = story.hints.expected_selector or frontend_plan.expected_selector
+            assertions = _acceptance_assertions(story)
+            if expected_text:
+                assertions.insert(0, f"Rendered page contains visible text: {expected_text}")
+            if expected_selector:
+                assertions.insert(0, f"Rendered page exposes selector: {expected_selector}")
+            automation_ready = bool(target_path and (expected_text or expected_selector))
+            cases.append(
+                GeneratedTestCase(
+                    test_id=_generated_test_id(story, StoryTestType.BROWSER),
+                    story_id=story.story_id,
+                    project_id=story.project_id,
+                    title=story.title,
+                    domain=primary_domain,
+                    test_type=StoryTestType.BROWSER,
+                    priority=analysis.execution_priority,
+                    agent_role=AgentRole.FRONTEND_TESTER,
+                    target_path=target_path,
+                    expected_text=expected_text,
+                    expected_selector=expected_selector,
+                    steps=[
+                        f"Open {target_path}.",
+                        "Wait for the page to finish rendering.",
+                        "Check expected UI evidence from the story.",
+                    ],
+                    assertions=assertions,
+                    automation_ready=automation_ready,
+                    blocked_reason=None if automation_ready else "Browser automation needs expected_text or expected_selector.",
+                    reasoning=frontend_plan.reasoning or analysis.reasoning,
+                )
+            )
+            continue
+
+        if primary_domain == StoryDomain.API or analysis.assigned_agent == AgentRole.API_TESTER:
+            target_path = story.hints.api_path or infer_story_path(story)
+            automation_ready = bool(target_path)
+            method = story.hints.method.upper()
+            expected_status = story.hints.expected_status
+            cases.append(
+                GeneratedTestCase(
+                    test_id=_generated_test_id(story, StoryTestType.API),
+                    story_id=story.story_id,
+                    project_id=story.project_id,
+                    title=story.title,
+                    domain=primary_domain,
+                    test_type=StoryTestType.API,
+                    priority=analysis.execution_priority,
+                    agent_role=AgentRole.API_TESTER,
+                    target_path=target_path,
+                    method=method,
+                    expected_status=expected_status,
+                    steps=[
+                        f"Send {method} request to {target_path or '[missing API path]'}.",
+                        "Capture response status, timing, and response excerpt.",
+                    ],
+                    assertions=[
+                        f"Response status equals {expected_status}.",
+                        *_acceptance_assertions(story),
+                    ],
+                    automation_ready=automation_ready,
+                    blocked_reason=None if automation_ready else "API automation needs hints.api_path or a clear endpoint path in the story.",
+                    reasoning=analysis.reasoning,
+                )
+            )
+            continue
+
+        cases.append(
+            _manual_generated_case(
+                story,
+                reason=(
+                    f"{primary_domain.value} stories are classified, but this product slice does not yet have "
+                    "a dedicated automated executor for that domain."
+                ),
+            )
+        )
+
+    automated_cases = sum(1 for item in cases if item.automation_ready)
+    blocked_cases = sum(1 for item in cases if item.blocked_reason)
+    browser_cases = sum(1 for item in cases if item.test_type == StoryTestType.BROWSER)
+    api_cases = sum(1 for item in cases if item.test_type == StoryTestType.API)
+    manual_cases = sum(1 for item in cases if item.test_type == StoryTestType.MANUAL_REVIEW)
+    return ProjectGeneratedTestPlan(
+        project_id=project.project_id,
+        total_cases=len(cases),
+        automated_cases=automated_cases,
+        blocked_cases=blocked_cases,
+        browser_cases=browser_cases,
+        api_cases=api_cases,
+        manual_cases=manual_cases,
+        cases=cases,
     )
 
 

@@ -62,6 +62,14 @@ class StoryExecutionPriority(str, Enum):
     CRITICAL = "critical"
 
 
+class ProjectJobStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class AgentRole(str, Enum):
     PLANNER = "planner"
     FRONTEND_TESTER = "frontend_tester"
@@ -682,6 +690,40 @@ class FrontendStoryTestPlan(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class GeneratedTestCase(BaseModel):
+    test_id: str
+    story_id: str
+    project_id: str
+    title: str
+    domain: StoryDomain = StoryDomain.UNKNOWN
+    test_type: StoryTestType = StoryTestType.MANUAL_REVIEW
+    priority: StoryExecutionPriority = StoryExecutionPriority.MEDIUM
+    agent_role: AgentRole
+    target_path: Optional[str] = None
+    method: Optional[str] = None
+    expected_status: Optional[int] = None
+    expected_text: Optional[str] = None
+    expected_selector: Optional[str] = None
+    steps: List[str] = Field(default_factory=list)
+    assertions: List[str] = Field(default_factory=list)
+    automation_ready: bool = False
+    blocked_reason: Optional[str] = None
+    source: str = "story"
+    reasoning: str = ""
+
+
+class ProjectGeneratedTestPlan(BaseModel):
+    project_id: str
+    total_cases: int = 0
+    automated_cases: int = 0
+    blocked_cases: int = 0
+    browser_cases: int = 0
+    api_cases: int = 0
+    manual_cases: int = 0
+    cases: List[GeneratedTestCase] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class FrontendTrainingRecord(BaseModel):
     story_id: str
     project_id: str
@@ -1127,6 +1169,19 @@ class TestEnvironmentRunResult(BaseModel):
     linked_session_id: Optional[str] = None
     started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ProjectJob(BaseModel):
+    job_id: str
+    project_id: str
+    job_type: str
+    status: ProjectJobStatus = ProjectJobStatus.QUEUED
+    summary: str = ""
+    error_message: Optional[str] = None
+    result: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class ProjectEvent(BaseModel):
