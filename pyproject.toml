@@ -27,3 +27,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["server", "graders", "tasks"]
 py-modules = ["models", "client", "inference", "rl_training"]
+
+[tool.pytest.ini_options]
+python_classes = ["*Tests"]
