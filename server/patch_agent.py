@@ -96,4 +96,17 @@ def generate_patch_draft(
     issues = validate_patch_proposal(patch)
     if issues:
         raise ValueError("Generated patch rejected by safety validation: " + " ".join(issues))
+    allowed_paths = {item["path"] for item in safe_context}
+    patch_paths: set[str] = set()
+    for line in patch.splitlines():
+        if line.startswith("diff --git "):
+            parts = line.split()
+            if len(parts) == 4:
+                patch_paths.update((parts[2][2:], parts[3][2:]))
+    if not patch_paths or not patch_paths.issubset(allowed_paths):
+        raise ValueError("Generated patch references files outside the supplied repository context.")
+    protected_names = {"package-lock.json", "pnpm-lock.yaml", "yarn.lock", "poetry.lock", "uv.lock", "Cargo.lock", "go.sum", "Dockerfile", "docker-compose.yml"}
+    protected_prefixes = (".github/workflows/", ".circleci/", "terraform/", "infra/", "deploy/")
+    if any(path.rsplit("/", 1)[-1].lower() in protected_names or path.lower().startswith(protected_prefixes) for path in patch_paths):
+        raise ValueError("Generated patch touches deployment, CI, or dependency-lock files and was rejected.")
     return patch, model
