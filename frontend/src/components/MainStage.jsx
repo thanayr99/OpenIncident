@@ -111,6 +111,8 @@ export function MainStage({
   runMissionControl,
   triageFirstIncident,
   investigateFirstIncident,
+  incidentWorkflowEvents = [],
+  incidentWorkflowRunId,
   busy,
   launchDemoFlow,
 }) {
@@ -796,6 +798,39 @@ export function MainStage({
               >
                 {busy.investigate ? "Investigating..." : "Investigate first incident"}
               </button>
+              {incidentWorkflowRunId ? (
+                <div className="incident-timeline">
+                  <div className="signal-row">
+                    <span>Workflow timeline</span>
+                    <strong>{incidentWorkflowEvents.length} events</strong>
+                  </div>
+                  {incidentWorkflowEvents.map((event) => (
+                    <button
+                      className="signal-row signal-button"
+                      key={event.event_id}
+                      onClick={() => setDetailPanel({
+                        title: event.event_type || "Incident workflow event",
+                        subtitle: "Incident " + incidentWorkflowRunId.slice(0, 8) + " · " + (event.agent_role || "workflow"),
+                        groups: [{
+                          id: event.event_id,
+                          title: event.summary || event.event_type,
+                          rows: [
+                            ["Status", event.status || "unknown"],
+                            ["Agent", event.agent_role || "unknown"],
+                            ["Confidence", event.confidence == null ? "Not provided" : Math.round(event.confidence * 100) + "%"],
+                            ["Time", formatTime(event.created_at)],
+                            ["Evidence", (event.evidence || []).map((item) => JSON.stringify(item)).join(" | ") || "No evidence attached"],
+                          ],
+                        }],
+                      })}
+                      type="button"
+                    >
+                      <span>{formatTime(event.created_at)}</span>
+                      <strong>{event.agent_role}: {event.event_type}</strong>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {activeRuns.length ? activeRuns.slice(0, 4).map((run) => (
                 <button className="signal-row signal-button" key={run.run_id} onClick={() => setDetailPanel({
                   title: "Incident run detail",
