@@ -1033,6 +1033,12 @@ def review_incident_readiness(
         blockers.append(f"{len(open_runs)} incident run(s) remain unresolved, including this incident.")
 
     decision = "blocked" if blockers else "ready_for_human_approval"
+    evidence.append({
+        "kind": "guardian_decision",
+        "decision": decision,
+        "blockers": blockers,
+        "automatic_deploy": False,
+    })
     summary = (
         "Guardian blocked readiness: " + " ".join(blockers)
         if blockers
