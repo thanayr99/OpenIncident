@@ -2708,6 +2708,32 @@ class InMemorySessionStore:
             metadata={"check_type": signal_snapshot.check_type, "target_url": signal_snapshot.target_url},
             persist=False,
         )
+        self._record_event(
+            project_id,
+            event_type="incident_workflow",
+            title="Incident detected by monitor",
+            message=trigger_reason,
+            severity="error",
+            source="monitor",
+            related_run_id=run.run_id,
+            related_session_id=session.session_id,
+            metadata={
+                "status": "detected",
+                "agent_role": "monitor",
+                "workflow_event_type": "signal_detected",
+                "evidence": [
+                    {
+                        "kind": "health_check",
+                        "target_url": signal_snapshot.target_url,
+                        "status": signal_snapshot.status,
+                        "status_code": signal_snapshot.status_code,
+                        "error_message": signal_snapshot.error_message,
+                    }
+                ],
+                "confidence": 1.0,
+            },
+            persist=False,
+        )
         self._save()
         return session, run, environment
 
