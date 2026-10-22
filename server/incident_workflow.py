@@ -58,7 +58,7 @@ ALLOWED_TRANSITIONS: dict[IncidentWorkflowStatus | None, set[IncidentWorkflowSta
     IncidentWorkflowStatus.INVESTIGATING: {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.TESTING, IncidentWorkflowStatus.FAILED, IncidentWorkflowStatus.CANCELLED},
     IncidentWorkflowStatus.TESTING: {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.AWAITING_APPROVAL, IncidentWorkflowStatus.FAILED, IncidentWorkflowStatus.CANCELLED},
     IncidentWorkflowStatus.AWAITING_APPROVAL: {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.RESOLVED, IncidentWorkflowStatus.CANCELLED},
-    IncidentWorkflowStatus.FAILED: {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.CANCELLED},
+    IncidentWorkflowStatus.FAILED: {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.TESTING, IncidentWorkflowStatus.FAILED, IncidentWorkflowStatus.CANCELLED},
     IncidentWorkflowStatus.RESOLVED: set(),
     IncidentWorkflowStatus.CANCELLED: set(),
 }
