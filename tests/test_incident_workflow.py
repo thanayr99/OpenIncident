@@ -81,13 +81,25 @@ def test_incident_workflow_records_ordered_evidence_and_rejects_invalid_transiti
     invalid_first = client.post(url, headers=headers, json=_event("investigating"))
     assert invalid_first.status_code == 409
 
-    for status in ("detected", "investigating", "testing", "awaiting_approval", "resolved"):
+    for status in ("detected", "investigating", "testing", "awaiting_approval"):
         response = client.post(url, headers=headers, json=_event(status))
         assert response.status_code == 201, response.text
         assert response.json()["status"] == status
 
+    agent_resolution = client.post(url, headers=headers, json=_event("resolved"))
+    assert agent_resolution.status_code == 403
+
+    approval = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/approve",
+        headers=headers,
+        json={"summary": "Reviewed the evidence and approved resolution."},
+    )
+    assert approval.status_code == 201, approval.text
+    assert approval.json()["status"] == "resolved"
+
     terminal_update = client.post(url, headers=headers, json=_event("investigating"))
     assert terminal_update.status_code == 409
+    assert appmod.session_store.get_run_by_id(run_id).status == "resolved"
 
     timeline = client.get(url, headers=headers)
     assert timeline.status_code == 200
@@ -121,3 +133,10 @@ def test_incident_workflow_enforces_project_ownership_and_run_binding(
 
     first = client.post(url, headers=owner_headers, json=_event("detected"))
     assert first.status_code == 201
+
+    approval_without_pending = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/approve",
+        headers=owner_headers,
+        json={"summary": "Should not be approved before the gate."},
+    )
+    assert approval_without_pending.status_code == 409
