@@ -104,6 +104,8 @@ from server.session_store import InMemorySessionStore
 from server.incident_workflow import (
     ALLOWED_TRANSITIONS,
     IncidentInvestigationRequest,
+    IncidentPatchDraftResponse,
+    IncidentPatchGenerationRequest,
     IncidentPatchProposalRequest,
     IncidentWorkflowApprovalRequest,
     IncidentWorkflowEvent,
@@ -114,6 +116,7 @@ from server.incident_workflow import (
 from server.story_engine import build_generated_test_plan, execute_api_story, execute_frontend_story
 from server.test_environment import run_test_environment, validate_patch_and_run_tests, validate_test_environment_commands
 from server.triage import build_run_triage
+from server.patch_agent import PatchDraftUnavailable, generate_patch_draft
 
 
 def _story_result_to_snapshot(result: UserStoryExecutionResult, story: UserStoryRecord) -> ProjectValidationSnapshot | None:
@@ -1089,6 +1092,68 @@ def review_incident_readiness(
     )
     records = list_incident_workflow_events(project_id, run_id, authorization)
     return records[-1]
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/patch-proposals/generate",
+    response_model=IncidentPatchDraftResponse,
+)
+def generate_incident_patch_proposal(
+    project_id: str,
+    run_id: str,
+    request: IncidentPatchGenerationRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentPatchDraftResponse:
+    project, _ = _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if not history or history[-1].status not in {
+        IncidentWorkflowStatus.INVESTIGATING,
+        IncidentWorkflowStatus.TESTING,
+        IncidentWorkflowStatus.FAILED,
+    }:
+        raise HTTPException(status_code=409, detail="Investigate the incident before generating a patch draft.")
+
+    query = (request.query or run.trigger_reason or "production incident failure").strip()[:500]
+    try:
+        inspection = inspect_repository_for_query(project, query)
+        code_context = [
+            {"path": match.path, "snippet": match.snippet or ""}
+            for match in inspection.matches[:8]
+            if match.snippet
+        ]
+        logs = [
+            {
+                "timestamp": entry.timestamp.isoformat(),
+                "level": entry.level,
+                "source": entry.source,
+                "message": entry.message,
+            }
+            for entry in session_store.list_project_logs(project_id)[:10]
+        ]
+        patch, model = generate_patch_draft(
+            query=query,
+            incident_summary=run.trigger_reason or query,
+            logs=logs,
+            code_context=code_context,
+        )
+    except PatchDraftUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Patch draft generation failed. Check the configured model provider and repository context.") from exc
+
+    return IncidentPatchDraftResponse(
+        summary="Generated draft only. Review the diff and run isolated validation before relying on it.",
+        patch=patch,
+        model=model,
+        context_files=[item["path"] for item in code_context],
+    )
 
 @app.post(
     "/projects/{project_id}/incidents/{run_id}/patch-proposals",
