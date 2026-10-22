@@ -244,33 +244,64 @@ def run_shell_command(
     *,
     cwd: str | Path,
     env: dict[str, str] | None = None,
-    shell_name: str = "powershell",
+    shell_name: str = "sh",
     timeout_seconds: float = 900.0,
 ) -> TestEnvironmentCommandResult:
-    started_at = perf_counter()
-    merged_env = os.environ.copy()
-    if env:
-        merged_env.update(env)
+    """Execute repository commands inside a disposable, resource-limited Docker container.
 
-    if shell_name.lower() == "cmd":
-        invocation = ["cmd.exe", "/c", command]
-    else:
-        invocation = ["powershell.exe", "-Command", command]
+    The repository workspace is the only host path mounted into the container.
+    Arbitrary project environment variables are deliberately not forwarded.
+    Docker is a required security boundary: never fall back to host subprocess execution.
+    """
+    started_at = perf_counter()
+    workspace = Path(cwd).resolve()
+    if not workspace.is_dir():
+        raise ValueError("Sandbox workspace must be an existing directory.")
+
+    runner_image = os.environ.get("OPENINCIDENT_TEST_RUNNER_IMAGE", "openincident-test-runner:local")
+    network_mode = os.environ.get("OPENINCIDENT_TEST_RUNNER_NETWORK", "none").strip().lower()
+    if network_mode not in {"none", "bridge"}:
+        raise ValueError("OPENINCIDENT_TEST_RUNNER_NETWORK must be 'none' or 'bridge'.")
+
+    timeout = max(1.0, min(float(timeout_seconds), 1800.0))
+    invocation = [
+        "docker", "run", "--rm",
+        "--network", network_mode,
+        "--memory", os.environ.get("OPENINCIDENT_TEST_RUNNER_MEMORY", "2g"),
+        "--cpus", os.environ.get("OPENINCIDENT_TEST_RUNNER_CPUS", "2"),
+        "--pids-limit", os.environ.get("OPENINCIDENT_TEST_RUNNER_PIDS", "256"),
+        "--user", "10001:10001",
+        "--read-only",
+        "--tmpfs", "/tmp:rw,noexec,nosuid,size=512m",
+        "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges:true",
+        "--mount", f"type=bind,src={workspace},dst=/workspace,rw",
+        "--workdir", "/workspace",
+        "--env", "HOME=/tmp",
+        "--env", "CI=true",
+        runner_image,
+        "sh", "-lc", command,
+    ]
 
     completed = subprocess.run(
         invocation,
-        cwd=str(cwd),
-        env=merged_env,
+        cwd=str(workspace),
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get("HOME", "/tmp"),
+            "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", ""),
+        },
         capture_output=True,
         text=True,
-        timeout=timeout_seconds,
+        timeout=timeout,
+        check=False,
     )
     duration = perf_counter() - started_at
     return TestEnvironmentCommandResult(
         command=command,
         return_code=completed.returncode,
-        stdout=completed.stdout[-12000:],
-        stderr=completed.stderr[-12000:],
+        stdout=(completed.stdout or "")[-12000:],
+        stderr=(completed.stderr or "")[-12000:],
         duration_seconds=round(duration, 3),
         success=completed.returncode == 0,
     )
