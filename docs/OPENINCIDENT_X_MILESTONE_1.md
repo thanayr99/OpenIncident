@@ -100,3 +100,12 @@ The React command center's Incident Evidence panel now exposes an **Investigate 
 
 - `POST /projects/{project_id}/incidents/{run_id}/request-approval`: advances a passing Guardian review to the human-approval stage. It rejects blocked or missing Guardian decisions.
 - The command center exposes separate buttons for Guardian review, requesting approval, and explicitly approving resolution. Approval only resolves the incident record; it does not merge code or deploy.
+
+### Controlled patch proposals
+
+- `POST /projects/{project_id}/incidents/{run_id}/patch-proposals` accepts a bounded unified text diff after an incident has been investigated.
+- The API rejects traversal, absolute paths, credential-related files, binary patches, symlink/submodule changes, and oversized proposals.
+- A proposal is applied only to a temporary copy of the prepared test workspace on a disposable local branch named `openincident/patch-proposal`; the original workspace is not modified.
+- Configured install and regression commands execute together in one resource-limited Docker container. Host environment variables and project secrets are not forwarded, and network access follows the runner policy.
+- The patch and validation output are recorded in the incident timeline. Failed validation blocks Guardian readiness; successful validation is evidence for review, not proof that the production deployment is safe.
+- This milestone does not push a branch to the connected GitHub repository, create a remote pull request, or deploy. Remote branch/PR creation requires a properly scoped GitHub App integration and remains a separate approval step.
