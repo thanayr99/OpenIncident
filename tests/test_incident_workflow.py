@@ -140,3 +140,52 @@ def test_incident_workflow_enforces_project_ownership_and_run_binding(
         json={"summary": "Should not be approved before the gate."},
     )
     assert approval_without_pending.status_code == 409
+
+
+def test_investigate_endpoint_records_log_repository_and_triage_handoffs(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    headers = _headers(client, "Investigator", "workflow-investigator@example.com")
+    project_id, run_id = _project_and_run(client, headers)
+    inspected: list[str] = []
+
+    def fake_inspect(project, query: str):  # noqa: ANN001
+        inspected.append(query)
+        return SimpleNamespace(matches=[], error_message="mock repository inspection unavailable")
+
+    monkeypatch.setattr(appmod, "inspect_repository_for_query", fake_inspect)
+
+    response = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/investigate",
+        headers=headers,
+        json={"query": "API 500 stack trace"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert inspected == ["API 500 stack trace"]
+    records = response.json()
+    roles = [item["agent_role"] for item in records]
+    assert "orchestrator" in roles
+    assert "log_analyst" in roles
+    assert "code_investigator" in roles
+    assert "triage" in roles
+    assert records[-1]["event_type"] == "triage_summary"
+    assert appmod.session_store.get_run_by_id(run_id).status == "investigating"
+
+
+def test_investigate_endpoint_rejects_cross_project_run(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _headers(client, "Owner", "workflow-owner3@example.com")
+    project_id, _ = _project_and_run(client, headers)
+    other_project_id, other_run_id = _project_and_run(client, headers)
+    response = client.post(
+        f"/projects/{project_id}/incidents/{other_run_id}/investigate",
+        headers=headers,
+        json={"query": "failure"},
+    )
+    assert response.status_code == 404
