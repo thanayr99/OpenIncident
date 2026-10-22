@@ -85,3 +85,24 @@ def test_command_runner_kills_only_its_container_on_timeout(
     assert calls[0][:2] == ["docker", "run"]
     assert calls[1][:2] == ["docker", "kill"]
     assert calls[1][2] == calls[0][calls[0].index("--name") + 1]
+
+
+def test_sandbox_staging_excludes_credentials_and_repository_metadata() -> None:
+    names = [
+        ".env",
+        ".env.production",
+        ".git",
+        ".npmrc",
+        "id_rsa",
+        "service-account-prod.json",
+        "app.py",
+        "package.json",
+        "node_modules",
+    ]
+
+    ignored = runner._sandbox_ignore("/repo", names)
+
+    assert {".env", ".env.production", ".git", ".npmrc", "id_rsa",
+            "service-account-prod.json", "node_modules"} <= ignored
+    assert "app.py" not in ignored
+    assert "package.json" not in ignored
