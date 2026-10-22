@@ -155,6 +155,7 @@ export default function App() {
   const [predeployResult, setPredeployResult] = useState(null);
   const [incidentWorkflowEvents, setIncidentWorkflowEvents] = useState([]);
   const [incidentWorkflowRunId, setIncidentWorkflowRunId] = useState(null);
+  const [patchProposalText, setPatchProposalText] = useState("");
   const [stories, setStories] = useState([]);
   const [logs, setLogs] = useState([]);
   const [logSummary, setLogSummary] = useState(null);
@@ -949,6 +950,29 @@ export default function App() {
       setStageView("evidence");
     });
   }
+  async function proposeIncidentPatch() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId || !patchProposalText.trim()) {
+      setMessage("Investigate an incident and provide a unified diff before validating a patch.");
+      return;
+    }
+    await runTask("patchProposal", async () => {
+      const event = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/patch-proposals",
+        {
+          method: "POST",
+          body: JSON.stringify({ summary: "Proposed incident fix", patch: patchProposalText }),
+        },
+      );
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/workflow",
+      );
+      setIncidentWorkflowEvents(timeline);
+      setMessage(event.summary);
+      await refreshSummary(selectedProjectId);
+      setStageView("evidence");
+    });
+  }
   async function runIncidentGuardianReview() {
     const runId = incidentWorkflowRunId || activeRuns[0]?.run_id;
     if (!runId || !selectedProjectId) {
@@ -1362,6 +1386,9 @@ export default function App() {
         runIncidentGuardianReview={runIncidentGuardianReview}
         requestIncidentApproval={requestIncidentApproval}
         approveIncidentResolution={approveIncidentResolution}
+        patchProposalText={patchProposalText}
+        setPatchProposalText={setPatchProposalText}
+        proposeIncidentPatch={proposeIncidentPatch}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
         runInstantAgentDemo={runInstantAgentDemo}
