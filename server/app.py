@@ -101,6 +101,12 @@ from server.github_repo import (
     inspect_repository_for_story,
 )
 from server.session_store import InMemorySessionStore
+from server.incident_workflow import (
+    ALLOWED_TRANSITIONS,
+    IncidentWorkflowEvent,
+    IncidentWorkflowEventRequest,
+    IncidentWorkflowStatus,
+)
 from server.story_engine import build_generated_test_plan, execute_api_story, execute_frontend_story
 from server.test_environment import run_test_environment, validate_test_environment_commands
 from server.triage import build_run_triage
@@ -671,6 +677,107 @@ def list_project_events(
         return session_store.list_project_events(project_id, limit=limit)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get(
+    "/projects/{project_id}/incidents/{run_id}/workflow",
+    response_model=list[IncidentWorkflowEvent],
+)
+def list_incident_workflow_events(
+    project_id: str,
+    run_id: str,
+    authorization: str | None = Header(default=None),
+) -> list[IncidentWorkflowEvent]:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    records = []
+    for event in session_store.list_project_events(project_id):
+        if event.event_type != "incident_workflow" or event.related_run_id != run_id:
+            continue
+        try:
+            records.append(
+                IncidentWorkflowEvent(
+                    event_id=event.event_id,
+                    project_id=project_id,
+                    run_id=run_id,
+                    status=event.metadata["status"],
+                    agent_role=event.metadata["agent_role"],
+                    event_type=event.metadata["workflow_event_type"],
+                    summary=event.message,
+                    evidence=event.metadata.get("evidence", []),
+                    confidence=event.metadata.get("confidence"),
+                    created_at=event.timestamp,
+                )
+            )
+        except (KeyError, ValueError):
+            # Ignore malformed historical entries rather than failing the whole timeline.
+            continue
+    return sorted(records, key=lambda item: item.created_at)
+
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/workflow",
+    response_model=IncidentWorkflowEvent,
+    status_code=201,
+)
+def append_incident_workflow_event(
+    project_id: str,
+    run_id: str,
+    request: IncidentWorkflowEventRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    current_status = history[-1].status if history else None
+    if request.status not in ALLOWED_TRANSITIONS[current_status]:
+        current_label = current_status.value if current_status else "not_started"
+        raise HTTPException(
+            status_code=409,
+            detail=f"Invalid incident transition: {current_label} -> {request.status.value}",
+        )
+
+    event = session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title=request.event_type,
+        message=request.summary,
+        severity="error" if request.status == IncidentWorkflowStatus.FAILED else "info",
+        source=request.agent_role,
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": request.status.value,
+            "agent_role": request.agent_role,
+            "workflow_event_type": request.event_type,
+            "evidence": request.evidence,
+            "confidence": request.confidence,
+        },
+    )
+    return IncidentWorkflowEvent(
+        event_id=event.event_id,
+        project_id=project_id,
+        run_id=run_id,
+        status=request.status,
+        agent_role=request.agent_role,
+        event_type=request.event_type,
+        summary=request.summary,
+        evidence=request.evidence,
+        confidence=request.confidence,
+        created_at=event.timestamp,
+    )
 
 
 @app.get("/projects/{project_id}/summary", response_model=ProjectCommandCenterSummary)
