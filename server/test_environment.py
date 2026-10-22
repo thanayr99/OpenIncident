@@ -8,6 +8,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
+from uuid import uuid4
 
 from models import (
     EnvironmentWorkspaceInsight,
@@ -264,38 +265,57 @@ def run_shell_command(
         raise ValueError("OPENINCIDENT_TEST_RUNNER_NETWORK must be 'none' or 'bridge'.")
 
     timeout = max(1.0, min(float(timeout_seconds), 1800.0))
+    container_name = f"openincident-test-{uuid4().hex}"
     invocation = [
         "docker", "run", "--rm",
+        "--name", container_name,
+        "--label", "openincident.managed=true",
+        "--init",
         "--network", network_mode,
         "--memory", os.environ.get("OPENINCIDENT_TEST_RUNNER_MEMORY", "2g"),
         "--cpus", os.environ.get("OPENINCIDENT_TEST_RUNNER_CPUS", "2"),
         "--pids-limit", os.environ.get("OPENINCIDENT_TEST_RUNNER_PIDS", "256"),
         "--user", "10001:10001",
         "--read-only",
-        "--tmpfs", "/tmp:rw,noexec,nosuid,size=512m",
+        "--tmpfs", "/tmp:rw,exec,nosuid,size=512m",
+        "--tmpfs", "/workspace:rw,exec,nosuid,size=2g",
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges:true",
-        "--mount", f"type=bind,src={workspace},dst=/workspace,rw",
+        "--mount", f"type=bind,src={workspace},dst=/source,readonly",
         "--workdir", "/workspace",
         "--env", "HOME=/tmp",
         "--env", "CI=true",
         runner_image,
-        "sh", "-lc", command,
+        "sh", "-lc", 'cp -a /source/. /workspace/ && exec sh -lc "$1"', "openincident-runner", command,
     ]
 
-    completed = subprocess.run(
-        invocation,
-        cwd=str(workspace),
-        env={
-            "PATH": os.environ.get("PATH", ""),
-            "HOME": os.environ.get("HOME", "/tmp"),
-            "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", ""),
-        },
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    docker_env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", "/tmp"),
+    }
+    if os.environ.get("DOCKER_CONFIG"):
+        docker_env["DOCKER_CONFIG"] = os.environ["DOCKER_CONFIG"]
+    try:
+        completed = subprocess.run(
+            invocation,
+            cwd=str(workspace),
+            env=docker_env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        # Kill only this run's container; never sweep shared Docker resources.
+        subprocess.run(
+            ["docker", "kill", container_name],
+            env=docker_env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        raise
     duration = perf_counter() - started_at
     return TestEnvironmentCommandResult(
         command=command,
