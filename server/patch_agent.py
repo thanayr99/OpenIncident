@@ -31,10 +31,10 @@ def _extract_diff(output: str) -> str:
         candidates = [part.strip() for part in parts if "diff --git " in part]
         if candidates:
             text = candidates[0]
-            if text.startswith("diff"):
+            if text.startswith("diff --git "):
                 return text
             first_newline = text.find("\n")
-            if first_newline >= 0:
+            if first_newline >= 0 and text[:first_newline].strip().lower() in {"diff", "patch"}:
                 text = text[first_newline + 1:]
     start = text.find("diff --git ")
     return text[start:].strip() if start >= 0 else ""
