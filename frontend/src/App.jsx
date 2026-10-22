@@ -153,6 +153,8 @@ export default function App() {
   const [frontendDiscovery, setFrontendDiscovery] = useState(null);
   const [latestCheck, setLatestCheck] = useState(null);
   const [predeployResult, setPredeployResult] = useState(null);
+  const [incidentWorkflowEvents, setIncidentWorkflowEvents] = useState([]);
+  const [incidentWorkflowRunId, setIncidentWorkflowRunId] = useState(null);
   const [stories, setStories] = useState([]);
   const [logs, setLogs] = useState([]);
   const [logSummary, setLogSummary] = useState(null);
@@ -940,7 +942,9 @@ export default function App() {
           body: JSON.stringify({ query: run.trigger_reason || "incident failure" }),
         },
       );
-      setMessage("Investigation complete: " + timeline.length + " workflow events recorded. Review the Evidence feed.");
+      setIncidentWorkflowEvents(timeline);
+      setIncidentWorkflowRunId(run.run_id);
+      setMessage("Investigation complete: " + timeline.length + " workflow events recorded.");
       await refreshSummary(selectedProjectId);
       setStageView("evidence");
     });
@@ -1299,6 +1303,8 @@ export default function App() {
         runMissionControl={runMissionControl}
         triageFirstIncident={triageFirstIncident}
         investigateFirstIncident={investigateFirstIncident}
+        incidentWorkflowEvents={incidentWorkflowEvents}
+        incidentWorkflowRunId={incidentWorkflowRunId}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
         runInstantAgentDemo={runInstantAgentDemo}
