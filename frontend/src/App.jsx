@@ -926,6 +926,25 @@ export default function App() {
     });
   }
 
+  async function investigateFirstIncident() {
+    const run = activeRuns[0];
+    if (!run) {
+      setMessage("No active incident to investigate.");
+      return;
+    }
+    await runTask("investigate", async () => {
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + run.run_id + "/investigate",
+        {
+          method: "POST",
+          body: JSON.stringify({ query: run.trigger_reason || "incident failure" }),
+        },
+      );
+      setMessage("Investigation complete: " + timeline.length + " workflow events recorded. Review the Evidence feed.");
+      await refreshSummary(selectedProjectId);
+      setStageView("evidence");
+    });
+  }
   async function triageFirstIncident() {
     const run = activeRuns[0];
     if (!run) {
@@ -1279,6 +1298,7 @@ export default function App() {
         runPredeployGate={runPredeployGate}
         runMissionControl={runMissionControl}
         triageFirstIncident={triageFirstIncident}
+        investigateFirstIncident={investigateFirstIncident}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
         runInstantAgentDemo={runInstantAgentDemo}
