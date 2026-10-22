@@ -306,16 +306,14 @@ def test_patch_proposal_records_isolated_validation_and_blocks_failed_patch(
     workspace = tmp_path / "patch-workspace"
     workspace.mkdir()
     (workspace / "app.py").write_text("old\n", encoding="utf-8")
-    appmod.session_store.set_test_environment_config(
-        project_id,
-        appmod.TestEnvironmentConfigRequest(
-            repository_url="https://github.com/example/workflow-test",
-            install_command=None,
-            test_command="pytest -q",
-            enabled=True,
-            shell="sh",
-            env={},
-        ),
+    appmod.session_store._test_env_configs[project_id] = appmod.TestEnvironmentConfig(
+        project_id=project_id,
+        repository_url="https://github.com/example/workflow-test",
+        install_command=None,
+        test_command="pytest -q",
+        enabled=True,
+        shell="sh",
+        env={},
     )
     monkeypatch.setattr(appmod.session_store, "get_latest_test_environment_workspace", lambda _project_id: str(workspace))
     monkeypatch.setattr(
@@ -379,9 +377,11 @@ def test_patch_proposal_rejects_unsafe_diff_before_running_tests(
     project_id, run_id = _project_and_run(client, headers)
     workspace = tmp_path / "unsafe-patch-workspace"
     workspace.mkdir()
-    appmod.session_store.set_test_environment_config(
-        project_id,
-        appmod.TestEnvironmentConfigRequest(repository_url="https://github.com/example/workflow-test", test_command="pytest", shell="sh"),
+    appmod.session_store._test_env_configs[project_id] = appmod.TestEnvironmentConfig(
+        project_id=project_id,
+        repository_url="https://github.com/example/workflow-test",
+        test_command="pytest",
+        shell="sh",
     )
     monkeypatch.setattr(appmod.session_store, "get_latest_test_environment_workspace", lambda _project_id: str(workspace))
     called = False
