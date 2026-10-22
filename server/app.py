@@ -1143,6 +1143,7 @@ def propose_and_validate_incident_patch(
         },
         {
             "kind": "patch_validation",
+            "branch_name": validation.get("branch_name", "openincident/patch-proposal"),
             "success": bool(validation.get("success")),
             "stage": validation.get("stage", "unknown"),
             "summary": validation.get("summary", "Validation did not return a summary."),
