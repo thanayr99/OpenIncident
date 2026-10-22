@@ -69,6 +69,9 @@ Until that runner exists and is verified, use mocked test execution or trusted l
 - Compare agents against deterministic and random baselines on matched, held-out scenarios.
 - Report success rate, time/steps to recovery, unsafe actions, premature closure, and confidence intervals.
 
+
+- `POST /projects/{project_id}/incidents/{run_id}/investigate`: run a bounded investigation pass that records the Orchestrator, Log Analyst, Code Investigator and Triage handoffs in the same timeline. It uses the existing project log store, the existing public-GitHub repository inspector and the current deterministic triage engine. The route does not modify repository files or deploy changes.
+
 ## Non-goals for this milestone
 
 - No autonomous production deployment.
