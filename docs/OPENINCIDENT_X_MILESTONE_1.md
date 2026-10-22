@@ -95,5 +95,5 @@ The React command center's Incident Evidence panel now exposes an **Investigate 
 
 - `POST /projects/{project_id}/incidents/{run_id}/guardian-review` evaluates the currently recorded user-story report, latest validation check, and unresolved incident count.
 - It records a `test_guardian` event with a structured `guardian_decision` evidence item and explicit blockers.
-- The review is intentionally conservative: no stories, no recorded check, a non-healthy latest check, incomplete/failed stories, or unresolved incidents block readiness.
+- The review is intentionally conservative: no stories, no recorded check, a non-healthy latest check, incomplete/failed stories, or unresolved *other* incidents block readiness. The latest validation check must also be newer than the incident trigger.
 - It does not execute tests, assert that an unrun test passed, modify code, resolve an incident, merge changes, or deploy. Human approval remains a separate gate.
