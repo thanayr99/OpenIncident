@@ -949,6 +949,27 @@ export default function App() {
       setStageView("evidence");
     });
   }
+  async function runIncidentGuardianReview() {
+    const runId = incidentWorkflowRunId || activeRuns[0]?.run_id;
+    if (!runId || !selectedProjectId) {
+      setMessage("Investigate an incident before requesting Guardian review.");
+      return;
+    }
+    await runTask("guardianReview", async () => {
+      const event = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/guardian-review",
+        { method: "POST" },
+      );
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/workflow",
+      );
+      setIncidentWorkflowEvents(timeline);
+      setIncidentWorkflowRunId(runId);
+      setMessage("Guardian review: " + event.summary);
+      await refreshSummary(selectedProjectId);
+      setStageView("evidence");
+    });
+  }
   async function triageFirstIncident() {
     const run = activeRuns[0];
     if (!run) {
@@ -1305,6 +1326,7 @@ export default function App() {
         investigateFirstIncident={investigateFirstIncident}
         incidentWorkflowEvents={incidentWorkflowEvents}
         incidentWorkflowRunId={incidentWorkflowRunId}
+        runIncidentGuardianReview={runIncidentGuardianReview}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
         runInstantAgentDemo={runInstantAgentDemo}
