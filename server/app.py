@@ -1027,10 +1027,12 @@ def review_incident_readiness(
         blockers.append(f"{report.pending_stories} user story/stories remain pending.")
     if latest_check is None:
         blockers.append("No recorded validation check is available.")
+    elif latest_check.checked_at < run.created_at:
+        blockers.append("The latest recorded validation check predates this incident; a fresh check is required.")
     elif latest_check.status != "healthy":
         blockers.append(f"The latest recorded validation check is {latest_check.status}, not healthy.")
     if open_runs:
-        blockers.append(f"{len(open_runs)} incident run(s) remain unresolved, including this incident.")
+        blockers.append(f"{len(open_runs)} other incident run(s) remain unresolved.")
 
     decision = "blocked" if blockers else "ready_for_human_approval"
     evidence.append({
