@@ -104,13 +104,14 @@ from server.session_store import InMemorySessionStore
 from server.incident_workflow import (
     ALLOWED_TRANSITIONS,
     IncidentInvestigationRequest,
+    IncidentPatchProposalRequest,
     IncidentWorkflowApprovalRequest,
     IncidentWorkflowEvent,
     IncidentWorkflowEventRequest,
     IncidentWorkflowStatus,
 )
 from server.story_engine import build_generated_test_plan, execute_api_story, execute_frontend_story
-from server.test_environment import run_test_environment, validate_test_environment_commands
+from server.test_environment import run_test_environment, validate_patch_and_run_tests, validate_test_environment_commands
 from server.triage import build_run_triage
 
 
@@ -1071,6 +1072,102 @@ def review_incident_readiness(
     )
     records = list_incident_workflow_events(project_id, run_id, authorization)
     return records[-1]
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/patch-proposals",
+    response_model=IncidentWorkflowEvent,
+    status_code=201,
+)
+def propose_and_validate_incident_patch(
+    project_id: str,
+    run_id: str,
+    request: IncidentPatchProposalRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+        config = session_store.get_test_environment_config(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail="Configure the project test environment before validating a patch.") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+    if not config.enabled:
+        raise HTTPException(status_code=409, detail="The project test environment is disabled.")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    current_status = history[-1].status if history else None
+    if current_status not in {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.TESTING, IncidentWorkflowStatus.FAILED}:
+        raise HTTPException(status_code=409, detail="Investigate the incident before proposing a patch.")
+
+    patch_issues = validate_patch_proposal(request.patch)
+    if patch_issues:
+        raise HTTPException(status_code=422, detail={"message": "Patch proposal rejected by safety validation.", "issues": patch_issues})
+    if not config.test_command:
+        raise HTTPException(status_code=409, detail="Configure a regression test command before validating a patch.")
+    workspace = session_store.get_latest_test_environment_workspace(project_id)
+    if not workspace or not Path(workspace).is_dir():
+        raise HTTPException(status_code=409, detail="Prepare the project test workspace before proposing a patch.")
+
+    validation = validate_patch_and_run_tests(
+        workspace,
+        request.patch,
+        install_command=config.install_command,
+        test_command=config.test_command,
+        timeout_seconds=900.0,
+    )
+    next_status = IncidentWorkflowStatus.TESTING if validation.get("success") else IncidentWorkflowStatus.FAILED
+    evidence = [
+        {
+            "kind": "patch_proposal",
+            "summary": request.summary,
+            "diff": request.patch,
+            "changed_files": validation.get("changed_files", []),
+        },
+        {
+            "kind": "patch_validation",
+            "success": bool(validation.get("success")),
+            "stage": validation.get("stage", "unknown"),
+            "summary": validation.get("summary", "Validation did not return a summary."),
+            "return_code": validation.get("return_code"),
+            "stdout": validation.get("stdout", ""),
+            "stderr": validation.get("stderr", validation.get("error", "")),
+            "duration_seconds": validation.get("duration_seconds"),
+        },
+    ]
+    event = session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Patch proposal validation " + ("passed" if validation.get("success") else "failed"),
+        message=str(validation.get("summary", "Patch validation completed."))[:2000],
+        severity="info" if validation.get("success") else "error",
+        source="patch_validation_agent",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": next_status.value,
+            "agent_role": "patch_validation_agent",
+            "workflow_event_type": "patch_proposal_validation",
+            "evidence": evidence,
+            "confidence": 1.0 if validation.get("success") else 0.0,
+        },
+    )
+    run.status = next_status.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return IncidentWorkflowEvent(
+        event_id=event.event_id,
+        project_id=project_id,
+        run_id=run_id,
+        status=next_status,
+        agent_role="patch_validation_agent",
+        event_type="patch_proposal_validation",
+        summary=str(validation.get("summary", "Patch validation completed."))[:2000],
+        evidence=evidence,
+        confidence=1.0 if validation.get("success") else 0.0,
+        created_at=event.timestamp,
+    )
 
 @app.post(
     "/projects/{project_id}/incidents/{run_id}/request-approval",
