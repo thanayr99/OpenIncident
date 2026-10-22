@@ -109,3 +109,6 @@ The React command center's Incident Evidence panel now exposes an **Investigate 
 - Configured install and regression commands execute together in one resource-limited Docker container. Host environment variables and project secrets are not forwarded, and network access follows the runner policy.
 - The patch and validation output are recorded in the incident timeline. Failed validation blocks Guardian readiness; successful validation is evidence for review, not proof that the production deployment is safe.
 - This milestone does not push a branch to the connected GitHub repository, create a remote pull request, or deploy. Remote branch/PR creation requires a properly scoped GitHub App integration and remains a separate approval step.
+
+- `POST /projects/{project_id}/incidents/{run_id}/patch-proposals/generate` can ask the configured Hugging Face OpenAI-compatible provider (`HF_TOKEN`, optional `API_BASE_URL`, `MODEL_NAME`) for a minimal unified diff from repository snippets and sanitized recent logs.
+- Generated output is safety-validated before being returned to the editor. The operator must still review it and explicitly run isolated patch validation; the provider is not allowed to apply or deploy the patch directly.
