@@ -16,7 +16,7 @@ class PatchDraftUnavailable(RuntimeError):
 def _redact(text: str) -> str:
     patterns = [
         (re.compile(r"(?i)(authorization\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+"), r"\1[REDACTED]"),
-        (re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|hf_token|database_url|client_secret|private[_-]?key)(?:\s*[:=]\s*))[^^\s,;]+"), r"\1[REDACTED]"),
+        (re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|hf_token|database_url|client_secret|private[_-]?key)(?:\s*[:=]\s*))[^\s,;]+"), r"\1[REDACTED]"),
         (re.compile(r"(?i)(postgres(?:ql)?://[^:\s]+:)[^@\s]+(@)"), r"\1[REDACTED]\2"),
         (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED_AWS_KEY]"),
     ]
