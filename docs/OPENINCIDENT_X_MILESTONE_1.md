@@ -97,3 +97,6 @@ The React command center's Incident Evidence panel now exposes an **Investigate 
 - It records a `test_guardian` event with a structured `guardian_decision` evidence item and explicit blockers.
 - The review is intentionally conservative: no stories, no recorded check, a non-healthy latest check, incomplete/failed stories, or unresolved *other* incidents block readiness. The latest validation check must also be newer than the incident trigger.
 - It does not execute tests, assert that an unrun test passed, modify code, resolve an incident, merge changes, or deploy. Human approval remains a separate gate.
+
+- `POST /projects/{project_id}/incidents/{run_id}/request-approval`: advances a passing Guardian review to the human-approval stage. It rejects blocked or missing Guardian decisions.
+- The command center exposes separate buttons for Guardian review, requesting approval, and explicitly approving resolution. Approval only resolves the incident record; it does not merge code or deploy.
