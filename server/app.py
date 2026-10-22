@@ -1118,6 +1118,8 @@ def generate_incident_patch_proposal(
     }:
         raise HTTPException(status_code=409, detail="Investigate the incident before generating a patch draft.")
 
+    if not os.getenv("HF_TOKEN", "").strip():
+        raise HTTPException(status_code=503, detail="AI patch drafting is not configured. Set HF_TOKEN or paste a diff manually.")
     query = (request.query or run.trigger_reason or "production incident failure").strip()[:500]
     try:
         inspection = inspect_repository_for_query(project, query)
