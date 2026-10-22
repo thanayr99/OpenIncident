@@ -441,3 +441,58 @@ def run_test_environment(
         started_at=started_at,
         completed_at=completed_at,
     )
+
+
+def validate_patch_and_run_tests(
+    workspace_path: str | Path,
+    patch: str,
+    *,
+    install_command: str | None,
+    test_command: str | None,
+    timeout_seconds: float = 900.0,
+) -> dict[str, object]:
+    """Apply a text diff to a disposable copy and test it in one isolated container."""
+    import shlex
+
+    workspace = Path(workspace_path).resolve()
+    if not workspace.is_dir():
+        return {"success": False, "stage": "workspace", "summary": "Prepared test workspace is unavailable."}
+    commands = [command for command in (install_command, test_command) if command]
+    if not commands:
+        return {"success": False, "stage": "configuration", "summary": "Configure an install or test command before validating a patch."}
+    issues = [issue for command in commands for issue in validate_test_environment_command(command)]
+    if issues:
+        return {"success": False, "stage": "configuration", "summary": "Unsafe test command configuration: " + " ".join(issues)}
+
+    with tempfile.TemporaryDirectory(prefix="openincident-patch-") as temp_root:
+        candidate = Path(temp_root) / "candidate"
+        shutil.copytree(workspace, candidate, ignore=_sandbox_ignore, symlinks=True)
+        try:
+            subprocess.run(["git", "init", "-q", str(candidate)], check=True, capture_output=True, text=True, timeout=15)
+            subprocess.run(["git", "-C", str(candidate), "add", "-A"], check=True, capture_output=True, text=True, timeout=30)
+            subprocess.run(["git", "-C", str(candidate), "-c", "user.name=OpenIncident", "-c", "user.email=patch-validation@openincident.invalid", "commit", "--allow-empty", "-qm", "Baseline snapshot"], check=True, capture_output=True, text=True, timeout=30)
+            check = subprocess.run(["git", "-C", str(candidate), "apply", "--check", "--"], input=patch, check=False, capture_output=True, text=True, timeout=15)
+            if check.returncode != 0:
+                return {"success": False, "stage": "patch_check", "summary": "Patch does not apply cleanly to the prepared workspace.", "stderr": (check.stderr or check.stdout or "Patch applicability check failed.")[-4000:] }
+            applied = subprocess.run(["git", "-C", str(candidate), "apply", "--"], input=patch, check=False, capture_output=True, text=True, timeout=15)
+            if applied.returncode != 0:
+                return {"success": False, "stage": "patch_apply", "summary": "Patch could not be applied to the disposable workspace.", "stderr": (applied.stderr or applied.stdout or "Patch application failed.")[-4000:] }
+            changed = subprocess.run(["git", "-C", str(candidate), "diff", "--name-only"], check=True, capture_output=True, text=True, timeout=15)
+            diff_result = subprocess.run(["git", "-C", str(candidate), "diff", "--"], check=True, capture_output=True, text=True, timeout=15)
+            sequence = " && ".join("sh -lc " + shlex.quote(command) for command in commands)
+            result = run_shell_command(sequence, cwd=candidate, timeout_seconds=min(max(timeout_seconds, 1.0), 1800.0))
+            return {
+                "success": result.success,
+                "stage": "tests" if result.success else "tests_failed",
+                "summary": "Patch validation passed in an isolated test container." if result.success else "Patch applied, but isolated validation failed.",
+                "return_code": result.return_code,
+                "stdout": result.stdout[-8000:],
+                "stderr": result.stderr[-8000:],
+                "duration_seconds": result.duration_seconds,
+                "changed_files": [line for line in changed.stdout.splitlines() if line][:20],
+                "diff": diff_result.stdout[:100_000],
+            }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "stage": "timeout", "summary": "Patch validation exceeded a bounded setup or git operation timeout."}
+        except (OSError, subprocess.SubprocessError) as exc:
+            return {"success": False, "stage": "runner_error", "summary": "Patch validation could not start safely.", "error": str(exc)[:1000]}
