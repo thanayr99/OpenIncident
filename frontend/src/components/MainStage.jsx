@@ -908,7 +908,7 @@ export function MainStage({
                       </header>
                       <p>{latestPatchProposal.summary}</p>
                       <p className="muted">
-                        Branch: {latestPatchValidation?.branch_name || "openincident/patch-proposal"}
+                        Sandbox branch: {latestPatchValidation?.branch_name || "openincident/patch-proposal"}
                         {" · "}Files: {(latestPatchProposal.changed_files || []).join(", ") || "Not available"}
                       </p>
                       <pre style={{ maxHeight: "320px", overflow: "auto", whiteSpace: "pre", fontSize: "12px", padding: "12px", borderRadius: "8px" }}>
