@@ -30,6 +30,11 @@ class IncidentInvestigationRequest(BaseModel):
     query: str | None = Field(default=None, max_length=500)
 
 
+class IncidentPatchProposalRequest(BaseModel):
+    summary: str = Field(min_length=1, max_length=2000)
+    patch: str = Field(min_length=1, max_length=100_000)
+
+
 class IncidentWorkflowApprovalRequest(BaseModel):
     summary: str = Field(min_length=1, max_length=2000)
 
