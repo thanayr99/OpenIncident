@@ -286,7 +286,7 @@ def run_shell_command(
         "--env", "HOME=/tmp",
         "--env", "CI=true",
         runner_image,
-        "sh", "-lc", 'cp -a /source/. /workspace/ && exec sh -lc "$1"', "openincident-runner", command,
+        "sh", "-lc", 'cp -R /source/. /workspace/ && exec sh -lc "$1"', "openincident-runner", command,
     ]
 
     docker_env = {
