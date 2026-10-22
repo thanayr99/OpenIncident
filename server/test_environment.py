@@ -301,7 +301,7 @@ def run_shell_command(
     # apply at every directory depth, including nested .env and credential files.
     with tempfile.TemporaryDirectory(prefix="openincident-stage-") as staging_root:
         staged_workspace = Path(staging_root) / "repo"
-        shutil.copytree(workspace, staged_workspace, ignore=_sandbox_ignore)
+        shutil.copytree(workspace, staged_workspace, ignore=_sandbox_ignore, symlinks=True)
         invocation = [
             "docker", "run", "--rm",
             "--name", container_name,
