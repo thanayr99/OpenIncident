@@ -471,6 +471,7 @@ def validate_patch_and_run_tests(
             subprocess.run(["git", "init", "-q", str(candidate)], check=True, capture_output=True, text=True, timeout=15)
             subprocess.run(["git", "-C", str(candidate), "add", "-A"], check=True, capture_output=True, text=True, timeout=30)
             subprocess.run(["git", "-C", str(candidate), "-c", "user.name=OpenIncident", "-c", "user.email=patch-validation@openincident.invalid", "commit", "--allow-empty", "-qm", "Baseline snapshot"], check=True, capture_output=True, text=True, timeout=30)
+            subprocess.run(["git", "-C", str(candidate), "switch", "-c", "openincident/patch-proposal"], check=True, capture_output=True, text=True, timeout=15)
             check = subprocess.run(["git", "-C", str(candidate), "apply", "--check", "--"], input=patch, check=False, capture_output=True, text=True, timeout=15)
             if check.returncode != 0:
                 return {"success": False, "stage": "patch_check", "summary": "Patch does not apply cleanly to the prepared workspace.", "stderr": (check.stderr or check.stdout or "Patch applicability check failed.")[-4000:] }
@@ -484,7 +485,8 @@ def validate_patch_and_run_tests(
             return {
                 "success": result.success,
                 "stage": "tests" if result.success else "tests_failed",
-                "summary": "Patch validation passed in an isolated test container." if result.success else "Patch applied, but isolated validation failed.",
+                "branch_name": "openincident/patch-proposal",
+                "summary": "Patch validation passed in an isolated branch and test container." if result.success else "Patch applied in an isolated branch, but validation failed.",
                 "return_code": result.return_code,
                 "stdout": result.stdout[-8000:],
                 "stderr": result.stderr[-8000:],
