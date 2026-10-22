@@ -109,8 +109,12 @@ def validate_patch_proposal(patch: str) -> list[str]:
     forbidden_parts = {".git", ".env", ".ssh", "node_modules", ".venv", "venv"}
     forbidden_names = {".npmrc", ".pypirc", "id_rsa", "id_ed25519", "credentials.json", "service-account.json", "secrets.json"}
     for path in paths:
-        parts = {part.lower() for part in path.split("/")}
-        name = path.rsplit("/", 1)[-1].lower()
+        normalized = posixpath.normpath(path)
+        if path.startswith("/") or chr(92) in path or normalized in {".", ".."} or normalized.startswith("../"):
+            issues.append("Patch paths cannot be absolute or escape the repository workspace.")
+            continue
+        parts = {part.lower() for part in normalized.split("/")}
+        name = normalized.rsplit("/", 1)[-1].lower()
         if parts & forbidden_parts or name in forbidden_names or name.startswith(".env") or name.endswith((".pem", ".key", ".p12", ".pfx", ".secret")):
             issues.append("Patch touches a protected or credential-related path.")
     if not any(line.startswith("@@ ") for line in patch.splitlines()):
