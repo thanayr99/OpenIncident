@@ -30,3 +30,4 @@ jobs:
           tests/test_isolated_runner.py
           tests/test_auth_ownership.py
           tests/test_test_environment_safety.py
+          tests/test_incident_workflow.py
