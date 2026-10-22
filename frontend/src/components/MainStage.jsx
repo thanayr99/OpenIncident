@@ -119,6 +119,7 @@ export function MainStage({
   patchProposalText,
   setPatchProposalText,
   proposeIncidentPatch,
+  generateIncidentPatchDraft,
   busy,
   launchDemoFlow,
 }) {
@@ -851,6 +852,14 @@ export function MainStage({
                 spellCheck={false}
                 style={{ width: "100%", boxSizing: "border-box", fontFamily: "monospace", fontSize: "12px", resize: "vertical", padding: "10px", borderRadius: "8px" }}
               />
+              <button
+                className="primary-action"
+                onClick={generateIncidentPatchDraft}
+                disabled={!incidentWorkflowRunId || busy.generatePatch}
+                type="button"
+              >
+                {busy.generatePatch ? "Generating patch draft..." : "Generate patch draft with AI"}
+              </button>
               <button
                 className="primary-action"
                 onClick={proposeIncidentPatch}
