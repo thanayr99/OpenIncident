@@ -1008,7 +1008,7 @@ def review_incident_readiness(
             "available": latest_check is not None,
             "status": latest_check.status if latest_check else None,
             "check_type": latest_check.check_type if latest_check else None,
-            "timestamp": latest_check.timestamp.isoformat() if latest_check else None,
+            "timestamp": latest_check.checked_at.isoformat() if latest_check else None,
         },
         {
             "kind": "open_incidents",
