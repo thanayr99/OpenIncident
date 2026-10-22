@@ -90,3 +90,10 @@ Allowed state progression is constrained: `detected → investigating → testin
 The API records evidence supplied by the caller; it does not independently prove that a log excerpt or test artifact is authentic. The next iteration must attach trusted test-run IDs and evidence provenance before allowing the workflow to treat test results as release-grade proof.
 
 The React command center's Incident Evidence panel now exposes an **Investigate first incident** action. It calls the authenticated investigation endpoint and refreshes the project summary when the run finishes. CI also builds the frontend with Node.js 22 and the committed npm lockfile.
+
+### Guardian review
+
+- `POST /projects/{project_id}/incidents/{run_id}/guardian-review` evaluates the currently recorded user-story report, latest validation check, and unresolved incident count.
+- It records a `test_guardian` event with a structured `guardian_decision` evidence item and explicit blockers.
+- The review is intentionally conservative: no stories, no recorded check, a non-healthy latest check, incomplete/failed stories, or unresolved incidents block readiness.
+- It does not execute tests, assert that an unrun test passed, modify code, resolve an incident, merge changes, or deploy. Human approval remains a separate gate.
