@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 from datetime import datetime, timezone
@@ -462,8 +463,52 @@ class InMemorySessionStore:
     def _normalize_email(self, email: str) -> str:
         return email.strip().lower()
 
+    _PASSWORD_HASH_SCHEME = "pbkdf2_sha256"
+    _PASSWORD_HASH_ITERATIONS = 600_000
+
     def _hash_password(self, password: str) -> str:
-        return hashlib.sha256(password.encode("utf-8")).hexdigest()
+        salt = os.urandom(16)
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            self._PASSWORD_HASH_ITERATIONS,
+        )
+        return "$".join(
+            (
+                self._PASSWORD_HASH_SCHEME,
+                str(self._PASSWORD_HASH_ITERATIONS),
+                salt.hex(),
+                digest.hex(),
+            )
+        )
+
+    def _verify_password(self, password: str, stored_hash: str) -> bool:
+        parts = stored_hash.split("$")
+        if len(parts) == 4 and parts[0] == self._PASSWORD_HASH_SCHEME:
+            try:
+                iterations = int(parts[1])
+                salt = bytes.fromhex(parts[2])
+                expected = bytes.fromhex(parts[3])
+            except (ValueError, TypeError):
+                return False
+            # Bound the stored work factor to avoid attacker-controlled CPU exhaustion.
+            if not 100_000 <= iterations <= 1_000_000 or len(salt) != 16 or len(expected) != 32:
+                return False
+            actual = hashlib.pbkdf2_hmac(
+                "sha256",
+                password.encode("utf-8"),
+                salt,
+                iterations,
+            )
+            return hmac.compare_digest(actual, expected)
+
+        # Backward compatibility: upgrade existing unsalted SHA-256 hashes after
+        # a successful login, so existing users do not need a password reset.
+        if re.fullmatch(r"[0-9a-f]{64}", stored_hash):
+            legacy_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+            return hmac.compare_digest(legacy_hash, stored_hash)
+        return False
 
     def _to_auth_account(self, account: StoredAuthAccount) -> AuthAccount:
         return AuthAccount(
@@ -558,8 +603,11 @@ class InMemorySessionStore:
         account = self._auth_accounts.get(account_id)
         if account is None:
             raise ValueError("Invalid email or password")
-        if account.password_hash != self._hash_password(request.password):
+        if not self._verify_password(request.password, account.password_hash):
             raise ValueError("Invalid email or password")
+        if not account.password_hash.startswith(f"{self._PASSWORD_HASH_SCHEME}$"):
+            account.password_hash = self._hash_password(request.password)
+            self._write_auth_account(account)
 
         self._auth_tokens = {
             token: value
