@@ -1073,6 +1073,80 @@ def review_incident_readiness(
     return records[-1]
 
 @app.post(
+    "/projects/{project_id}/incidents/{run_id}/request-approval",
+    response_model=list[IncidentWorkflowEvent],
+)
+def request_incident_human_approval(
+    project_id: str,
+    run_id: str,
+    authorization: str | None = Header(default=None),
+) -> list[IncidentWorkflowEvent]:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if not history or history[-1].event_type != "guardian_review":
+        raise HTTPException(status_code=409, detail="Run Guardian review before requesting approval")
+    guardian_evidence = next(
+        (item for item in history[-1].evidence if item.get("kind") == "guardian_decision"),
+        None,
+    )
+    if not guardian_evidence or guardian_evidence.get("decision") != "ready_for_human_approval":
+        raise HTTPException(status_code=409, detail="Guardian blocked readiness; resolve the listed blockers first")
+    current_status = history[-1].status
+    if current_status not in {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.TESTING}:
+        raise HTTPException(status_code=409, detail=f"Incident cannot request approval from {current_status.value}")
+
+    if current_status == IncidentWorkflowStatus.INVESTIGATING:
+        session_store._record_event(
+            project_id,
+            event_type="incident_workflow",
+            title="Guardian accepted recorded validation evidence",
+            message="Existing completed story results and a fresh healthy check passed the preliminary gate. This endpoint did not execute tests.",
+            severity="info",
+            source="test_guardian",
+            related_run_id=run_id,
+            related_session_id=run.session_id,
+            metadata={
+                "status": IncidentWorkflowStatus.TESTING.value,
+                "agent_role": "test_guardian",
+                "workflow_event_type": "validation_evidence_accepted",
+                "evidence": history[-1].evidence,
+                "confidence": history[-1].confidence,
+            },
+            persist=False,
+        )
+
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Awaiting human approval",
+        message="Guardian readiness conditions passed. A human must explicitly approve incident resolution; no code was merged and no deployment was triggered.",
+        severity="warning",
+        source="orchestrator",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.AWAITING_APPROVAL.value,
+            "agent_role": "orchestrator",
+            "workflow_event_type": "awaiting_human_approval",
+            "evidence": [{"kind": "guardian_decision", "decision": "ready_for_human_approval"}],
+            "confidence": history[-1].confidence,
+        },
+        persist=False,
+    )
+    run.status = IncidentWorkflowStatus.AWAITING_APPROVAL.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return list_incident_workflow_events(project_id, run_id, authorization)
+
+@app.post(
     "/projects/{project_id}/incidents/{run_id}/approve",
     response_model=IncidentWorkflowEvent,
     status_code=201,
