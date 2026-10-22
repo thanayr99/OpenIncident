@@ -88,3 +88,5 @@ Until that runner exists and is verified, use mocked test execution or trusted l
 Allowed state progression is constrained: `detected → investigating → testing → awaiting_approval`. Investigation/testing may loop or fail; failed incidents can be reopened for investigation. `resolved` and `cancelled` are terminal. The generic workflow endpoint cannot mark an incident resolved; resolution requires the dedicated approval endpoint and a project-authorized authenticated account. Workflow entries are also written to the project's event timeline and update the associated run status.
 
 The API records evidence supplied by the caller; it does not independently prove that a log excerpt or test artifact is authentic. The next iteration must attach trusted test-run IDs and evidence provenance before allowing the workflow to treat test results as release-grade proof.
+
+The React command center's Incident Evidence panel now exposes an **Investigate first incident** action. It calls the authenticated investigation endpoint and refreshes the project summary when the run finishes. CI also builds the frontend with Node.js 22 and the committed npm lockfile.
