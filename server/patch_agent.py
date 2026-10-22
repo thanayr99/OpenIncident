@@ -15,8 +15,8 @@ class PatchDraftUnavailable(RuntimeError):
 
 def _redact(text: str) -> str:
     patterns = [
-        (re.compile(r"(?i)(authorization\\s*[:=]\\s*)(?:bearer\\s+)?[^\\s,;]+"), r"\\1[REDACTED]"),
-        (re.compile(r"(?i)(api[_-]?key|access[_-]?token|password|secret)(\\s*[:=]\\s*)[^\\s,;]+"), r"\\1\\2[REDACTED]"),
+        (re.compile(r"(?i)(authorization\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+"), r"\1[REDACTED]"),
+        (re.compile(r"(?i)(api[_-]?key|access[_-]?token|password|secret)(\s*[:=]\s*)[^\s,;]+"), r"\1\2[REDACTED]"),
     ]
     result = text
     for pattern, replacement in patterns:
@@ -33,7 +33,7 @@ def _extract_diff(output: str) -> str:
             text = candidates[0]
             if text.startswith("diff"):
                 return text
-            first_newline = text.find("\\n")
+            first_newline = text.find("\n")
             if first_newline >= 0:
                 text = text[first_newline + 1:]
     start = text.find("diff --git ")
@@ -78,10 +78,10 @@ def generate_patch_draft(
             {
                 "role": "user",
                 "content": (
-                    f"Incident summary: {incident_summary[:2000]}\\n"
-                    f"Investigation query: {query[:500]}\\n"
-                    f"Sanitized recent logs: {safe_logs}\\n"
-                    f"Repository code context: {safe_context}\\n"
+                    f"Incident summary: {incident_summary[:2000]}\n"
+                    f"Investigation query: {query[:500]}\n"
+                    f"Sanitized recent logs: {safe_logs}\n"
+                    f"Repository code context: {safe_context}\n"
                     "Propose a minimal patch that addresses the evidence. If the evidence is insufficient, return no diff."
                 ),
             },
