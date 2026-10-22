@@ -113,6 +113,7 @@ export function MainStage({
   investigateFirstIncident,
   incidentWorkflowEvents = [],
   incidentWorkflowRunId,
+  runIncidentGuardianReview,
   busy,
   launchDemoFlow,
 }) {
@@ -797,6 +798,14 @@ export function MainStage({
                 type="button"
               >
                 {busy.investigate ? "Investigating..." : "Investigate first incident"}
+              </button>
+              <button
+                className="secondary-action"
+                onClick={runIncidentGuardianReview}
+                disabled={!incidentWorkflowRunId || busy.guardianReview}
+                type="button"
+              >
+                {busy.guardianReview ? "Reviewing readiness..." : "Run Test Guardian review"}
               </button>
               {incidentWorkflowRunId ? (
                 <div className="incident-timeline">
