@@ -255,7 +255,7 @@ def test_guardian_ready_review_requires_human_approval_before_resolution(
     story.status = appmod.StoryStatus.COMPLETED
     appmod.session_store._stories[story.story_id] = story
     appmod.session_store._save()
-    appmod.session_store.add_validation_snapshot(
+    appmod.session_store._validation_snapshots[project_id] = [
         appmod.ProjectValidationSnapshot(
             project_id=project_id,
             check_type="health",
@@ -264,7 +264,7 @@ def test_guardian_ready_review_requires_human_approval_before_resolution(
             status="healthy",
             checked_at=datetime.now(timezone.utc),
         )
-    )
+    ]
     workflow_url = f"/projects/{project_id}/incidents/{run_id}/workflow"
     for status in ("detected", "investigating"):
         response = client.post(workflow_url, headers=headers, json=_event(status))
