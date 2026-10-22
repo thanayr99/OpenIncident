@@ -189,3 +189,43 @@ def test_investigate_endpoint_rejects_cross_project_run(
         json={"query": "failure"},
     )
     assert response.status_code == 404
+
+
+def test_guardian_review_blocks_when_story_check_and_incident_gates_are_unmet(
+    client: TestClient,
+) -> None:
+    headers = _headers(client, "Guardian", "workflow-guardian@example.com")
+    project_id, run_id = _project_and_run(client, headers)
+    workflow_url = f"/projects/{project_id}/incidents/{run_id}/workflow"
+    for status in ("detected", "investigating"):
+        response = client.post(workflow_url, headers=headers, json=_event(status))
+        assert response.status_code == 201, response.text
+
+    response = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/guardian-review",
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    review = response.json()
+    assert review["agent_role"] == "test_guardian"
+    assert review["event_type"] == "guardian_review"
+    assert review["status"] == "investigating"
+    assert any("No user stories" in item for item in review["evidence"][0].get("blockers", [])) is False
+    assert "blocked" in review["summary"].lower()
+    assert "No user stories are registered" in review["summary"]
+    assert "No recorded validation check" in review["summary"]
+    assert "remain unresolved" in review["summary"]
+
+
+def test_guardian_review_rejects_run_from_another_project(
+    client: TestClient,
+) -> None:
+    headers = _headers(client, "GuardianOwner", "workflow-guardian-owner@example.com")
+    project_id, _ = _project_and_run(client, headers)
+    other_project_id, other_run_id = _project_and_run(client, headers)
+    response = client.post(
+        f"/projects/{project_id}/incidents/{other_run_id}/guardian-review",
+        headers=headers,
+    )
+    assert response.status_code == 404
