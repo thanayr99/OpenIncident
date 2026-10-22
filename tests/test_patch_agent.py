@@ -54,3 +54,23 @@ def test_patch_generation_returns_only_a_validated_diff(monkeypatch: pytest.Monk
     )
     assert patch == VALID_DIFF
     assert model == "test-model"
+
+
+def test_patch_generation_rejects_paths_outside_supplied_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponses:
+        def create(self, **kwargs):
+            return SimpleNamespace(output_text=VALID_DIFF.replace("app.py", "other.py"))
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setattr(patch_agent, "OpenAI", FakeClient)
+    with pytest.raises(ValueError, match="outside the supplied repository context"):
+        patch_agent.generate_patch_draft(
+            query="fix app.py",
+            incident_summary="failure in app.py",
+            logs=[],
+            code_context=[{"path": "app.py", "snippet": "def f(): return 'old'"}],
+        )
