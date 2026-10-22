@@ -211,7 +211,10 @@ def test_guardian_review_blocks_when_story_check_and_incident_gates_are_unmet(
     assert review["agent_role"] == "test_guardian"
     assert review["event_type"] == "guardian_review"
     assert review["status"] == "investigating"
-    assert any("No user stories" in item for item in review["evidence"][0].get("blockers", [])) is False
+    guardian = next(item for item in review["evidence"] if item["kind"] == "guardian_decision")
+    assert guardian["decision"] == "blocked"
+    assert guardian["automatic_deploy"] is False
+    assert len(guardian["blockers"]) >= 3
     assert "blocked" in review["summary"].lower()
     assert "No user stories are registered" in review["summary"]
     assert "No recorded validation check" in review["summary"]
