@@ -103,6 +103,7 @@ from server.github_repo import (
 from server.session_store import InMemorySessionStore
 from server.incident_workflow import (
     ALLOWED_TRANSITIONS,
+    IncidentInvestigationRequest,
     IncidentWorkflowApprovalRequest,
     IncidentWorkflowEvent,
     IncidentWorkflowEventRequest,
@@ -788,6 +789,179 @@ def append_incident_workflow_event(
         confidence=request.confidence,
         created_at=event.timestamp,
     )
+
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/investigate",
+    response_model=list[IncidentWorkflowEvent],
+)
+def investigate_incident(
+    project_id: str,
+    run_id: str,
+    request: IncidentInvestigationRequest | None = None,
+    authorization: str | None = Header(default=None),
+) -> list[IncidentWorkflowEvent]:
+    project, _ = _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if history and history[-1].status in {
+        IncidentWorkflowStatus.RESOLVED,
+        IncidentWorkflowStatus.CANCELLED,
+        IncidentWorkflowStatus.AWAITING_APPROVAL,
+    }:
+        raise HTTPException(status_code=409, detail="Incident is not eligible for another investigation")
+
+    if not history:
+        initial_reason = run.trigger_reason or "Incident investigation requested."
+        session_store._record_event(
+            project_id,
+            event_type="incident_workflow",
+            title="Incident investigation initialized",
+            message=initial_reason,
+            severity="warning",
+            source="orchestrator",
+            related_run_id=run_id,
+            related_session_id=run.session_id,
+            metadata={
+                "status": IncidentWorkflowStatus.DETECTED.value,
+                "agent_role": "orchestrator",
+                "workflow_event_type": "incident_initialized",
+                "evidence": [{"kind": "incident_run", "source": run.source}],
+                "confidence": 1.0,
+            },
+        )
+        history = list_incident_workflow_events(project_id, run_id, authorization)
+
+    current_status = history[-1].status
+    if IncidentWorkflowStatus.INVESTIGATING not in ALLOWED_TRANSITIONS[current_status]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Incident cannot be investigated from {current_status.value}",
+        )
+
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Investigation started",
+        message="Orchestrator started bounded log, repository and triage analysis.",
+        severity="info",
+        source="orchestrator",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "orchestrator",
+            "workflow_event_type": "investigation_started",
+            "evidence": [],
+            "confidence": None,
+        },
+    )
+
+    log_entries = session_store.list_project_logs(project_id)[:20]
+    log_evidence = [
+        {
+            "kind": "log_entry",
+            "timestamp": entry.timestamp.isoformat(),
+            "severity": entry.level,
+            "source": entry.source,
+            "message": entry.message[:500],
+        }
+        for entry in log_entries
+    ]
+    log_summary = session_store.get_project_log_summary(project_id)
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Log Analyst findings",
+        message=(
+            f"Reviewed {log_summary.total_entries} log entries: "
+            f"{log_summary.error_entries} errors and {log_summary.warning_entries} warnings."
+            if log_summary.total_entries
+            else "No project log entries are available yet; log-based diagnosis remains incomplete."
+        ),
+        severity="info",
+        source="log_analyst",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "log_analyst",
+            "workflow_event_type": "log_analysis",
+            "evidence": log_evidence,
+            "confidence": 0.65 if log_entries else 0.0,
+        },
+    )
+
+    query = (request.query if request else None) or run.trigger_reason or "incident failure"
+    repo_result = inspect_repository_for_query(project, query[:500])
+    repo_evidence = [
+        {
+            "kind": "repository_match",
+            "path": match.path,
+            "score": match.score,
+            "reason": match.reason,
+            "snippet": (match.snippet or "")[:500],
+        }
+        for match in repo_result.matches[:10]
+    ]
+    if repo_result.error_message:
+        repo_evidence.append({"kind": "repository_inspection_error", "message": repo_result.error_message[:500]})
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Code Investigator findings",
+        message=(
+            f"Repository inspection found {len(repo_result.matches)} candidate code location(s) for the incident query."
+            if repo_result.matches
+            else f"Repository inspection returned no matching code locations. {repo_result.error_message or 'More evidence is needed.'}"
+        ),
+        severity="info",
+        source="code_investigator",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "code_investigator",
+            "workflow_event_type": "repository_investigation",
+            "evidence": repo_evidence,
+            "confidence": min(0.85, max((match.score for match in repo_result.matches), default=0.0)),
+            "query": query[:500],
+        },
+    )
+
+    triage = build_run_triage(session_store, run.session_id)
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Triage summary",
+        message=(
+            f"{triage.summary} Suspected cause (unverified): {triage.suspected_root_cause}"
+        )[:2000],
+        severity="info",
+        source="triage",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "triage",
+            "workflow_event_type": "triage_summary",
+            "evidence": [{"kind": "triage_evidence", "summary": item[:500]} for item in triage.evidence[:10]],
+            "confidence": triage.confidence,
+            "recommended_actions": [item.model_dump(mode="json") for item in triage.recommended_actions[:10]],
+            "suspected_root_cause": triage.suspected_root_cause,
+        },
+    )
+    run.status = IncidentWorkflowStatus.INVESTIGATING.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return list_incident_workflow_events(project_id, run_id, authorization)
 
 
 @app.post(
