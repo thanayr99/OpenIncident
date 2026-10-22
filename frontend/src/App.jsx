@@ -970,6 +970,39 @@ export default function App() {
       setStageView("evidence");
     });
   }
+  async function requestIncidentApproval() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId) return;
+    await runTask("requestApproval", async () => {
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/request-approval",
+        { method: "POST" },
+      );
+      setIncidentWorkflowEvents(timeline);
+      setMessage("Incident is awaiting your explicit approval. No code was merged or deployed.");
+      await refreshSummary(selectedProjectId);
+    });
+  }
+
+  async function approveIncidentResolution() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId) return;
+    await runTask("approveIncident", async () => {
+      await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/approve",
+        {
+          method: "POST",
+          body: JSON.stringify({ summary: "Human reviewed the incident evidence and explicitly approved resolution." }),
+        },
+      );
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/workflow",
+      );
+      setIncidentWorkflowEvents(timeline);
+      setMessage("Incident resolution approved and recorded. No deployment was triggered.");
+      await refreshSummary(selectedProjectId);
+    });
+  }
   async function triageFirstIncident() {
     const run = activeRuns[0];
     if (!run) {
@@ -1327,6 +1360,8 @@ export default function App() {
         incidentWorkflowEvents={incidentWorkflowEvents}
         incidentWorkflowRunId={incidentWorkflowRunId}
         runIncidentGuardianReview={runIncidentGuardianReview}
+        requestIncidentApproval={requestIncidentApproval}
+        approveIncidentResolution={approveIncidentResolution}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
         runInstantAgentDemo={runInstantAgentDemo}
