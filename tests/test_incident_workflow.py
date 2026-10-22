@@ -218,6 +218,12 @@ def test_guardian_review_blocks_when_story_check_and_incident_gates_are_unmet(
     assert "blocked" in review["summary"].lower()
     assert "No user stories are registered" in review["summary"]
     assert "No recorded validation check" in review["summary"]
+    approval_request = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/request-approval",
+        headers=headers,
+    )
+    assert approval_request.status_code == 409
+    assert appmod.session_store.get_run_by_id(run_id).status == "investigating"
 
 
 def test_guardian_review_rejects_run_from_another_project(
