@@ -26,6 +26,10 @@ class IncidentWorkflowEventRequest(BaseModel):
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class IncidentInvestigationRequest(BaseModel):
+    query: str | None = Field(default=None, max_length=500)
+
+
 class IncidentWorkflowApprovalRequest(BaseModel):
     summary: str = Field(min_length=1, max_length=2000)
 
