@@ -64,6 +64,7 @@ def test_patch_is_applied_to_disposable_copy_before_isolated_test_run(
 
     assert result["success"] is True
     assert result["stage"] == "tests"
+    assert result["branch_name"] == "openincident/patch-proposal"
     assert seen["content"] == "new\n"
     assert Path(seen["cwd"]) != workspace
     assert (workspace / "app.py").read_text(encoding="utf-8") == "old\n"
