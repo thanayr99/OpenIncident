@@ -16,11 +16,14 @@ class PatchDraftUnavailable(RuntimeError):
 def _redact(text: str) -> str:
     patterns = [
         (re.compile(r"(?i)(authorization\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+"), r"\1[REDACTED]"),
-        (re.compile(r"(?i)(api[_-]?key|access[_-]?token|password|secret)(\s*[:=]\s*)[^\s,;]+"), r"\1\2[REDACTED]"),
+        (re.compile(r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|hf_token|database_url|client_secret|private[_-]?key)(?:\s*[:=]\s*))[^^\s,;]+"), r"\1[REDACTED]"),
+        (re.compile(r"(?i)(postgres(?:ql)?://[^:\s]+:)[^@\s]+(@)"), r"\1[REDACTED]\2"),
+        (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED_AWS_KEY]"),
     ]
     result = text
     for pattern, replacement in patterns:
         result = pattern.sub(replacement, result)
+    result = re.sub(r"-----BEGIN [^-]+-----.*?-----END [^-]+-----", "[REDACTED_PRIVATE_KEY]", result, flags=re.DOTALL)
     return result[:4000]
 
 
