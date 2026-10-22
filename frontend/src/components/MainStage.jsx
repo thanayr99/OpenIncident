@@ -116,6 +116,9 @@ export function MainStage({
   runIncidentGuardianReview,
   requestIncidentApproval,
   approveIncidentResolution,
+  patchProposalText,
+  setPatchProposalText,
+  proposeIncidentPatch,
   busy,
   launchDemoFlow,
 }) {
@@ -833,6 +836,25 @@ export function MainStage({
                 type="button"
               >
                 {busy.approveIncident ? "Recording approval..." : "Approve incident resolution"}
+              </button>
+
+              <label className="field-label" htmlFor="incident-patch-diff">Proposed unified diff</label>
+              <textarea
+                id="incident-patch-diff"
+                value={patchProposalText}
+                onChange={(event) => setPatchProposalText(event.target.value)}
+                placeholder={"Paste a reviewed unified diff here, starting with diff --git a/file b/file"}
+                rows={8}
+                spellCheck={false}
+                style={{ width: "100%", boxSizing: "border-box", fontFamily: "monospace", fontSize: "12px", resize: "vertical", padding: "10px", borderRadius: "8px" }}
+              />
+              <button
+                className="primary-action"
+                onClick={proposeIncidentPatch}
+                disabled={!incidentWorkflowRunId || !patchProposalText.trim() || busy.patchProposal}
+                type="button"
+              >
+                {busy.patchProposal ? "Applying in sandbox and testing..." : "Validate patch in isolated sandbox"}
               </button>
 
               {incidentWorkflowRunId ? (
