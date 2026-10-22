@@ -993,7 +993,10 @@ def review_incident_readiness(
     report = session_store.build_story_report(project_id)
     checks = session_store.list_validation_snapshots(project_id)
     latest_check = checks[-1] if checks else None
-    open_runs = [item for item in session_store.list_runs(project_id) if item.status != "resolved"]
+    open_runs = [
+        item for item in session_store.list_runs(project_id)
+        if item.status != "resolved" and item.run_id != run_id
+    ]
     evidence = [
         {
             "kind": "story_report",
