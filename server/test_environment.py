@@ -240,6 +240,28 @@ def prepare_workspace(
     return _safe_workspace_child(workspace, config.workdir)
 
 
+_SANDBOX_EXCLUDED_NAMES = {
+    ".git", ".env", ".npmrc", ".pypirc", ".venv", "venv", "node_modules",
+    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist", "build",
+    "coverage", ".next", ".DS_Store",
+}
+_SANDBOX_EXCLUDED_PATTERNS = (
+    ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa", "id_ed25519",
+    "credentials.json", "service-account*.json", "*.secret", "secrets.*",
+)
+
+
+def _sandbox_ignore(_directory: str, names: list[str]) -> set[str]:
+    """Exclude common credentials, VCS metadata, and generated dependencies from staging."""
+    ignored = {name for name in names if name in _SANDBOX_EXCLUDED_NAMES}
+    ignored.update(
+        name
+        for name in names
+        if any(fnmatch.fnmatch(name, pattern) for pattern in _SANDBOX_EXCLUDED_PATTERNS)
+    )
+    return ignored
+
+
 def run_shell_command(
     command: str,
     *,
@@ -248,11 +270,11 @@ def run_shell_command(
     shell_name: str = "sh",
     timeout_seconds: float = 900.0,
 ) -> TestEnvironmentCommandResult:
-    """Execute repository commands inside a disposable, resource-limited Docker container.
+    """Execute repository commands in a disposable, resource-limited Docker container.
 
-    The repository workspace is the only host path mounted into the container.
-    Arbitrary project environment variables are deliberately not forwarded.
-    Docker is a required security boundary: never fall back to host subprocess execution.
+    A filtered staging copy is mounted read-only; the original workspace is never
+    mounted into the container. Host and project environment variables are not forwarded.
+    Docker is mandatory: there is deliberately no host-shell fallback.
     """
     started_at = perf_counter()
     workspace = Path(cwd).resolve()
@@ -266,56 +288,63 @@ def run_shell_command(
 
     timeout = max(1.0, min(float(timeout_seconds), 1800.0))
     container_name = f"openincident-test-{uuid4().hex}"
-    invocation = [
-        "docker", "run", "--rm",
-        "--name", container_name,
-        "--label", "openincident.managed=true",
-        "--init",
-        "--network", network_mode,
-        "--memory", os.environ.get("OPENINCIDENT_TEST_RUNNER_MEMORY", "2g"),
-        "--cpus", os.environ.get("OPENINCIDENT_TEST_RUNNER_CPUS", "2"),
-        "--pids-limit", os.environ.get("OPENINCIDENT_TEST_RUNNER_PIDS", "256"),
-        "--user", "10001:10001",
-        "--read-only",
-        "--tmpfs", "/tmp:rw,exec,nosuid,size=512m",
-        "--tmpfs", "/workspace:rw,exec,nosuid,size=2g",
-        "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges:true",
-        "--mount", f"type=bind,src={workspace},dst=/source,readonly",
-        "--workdir", "/workspace",
-        "--env", "HOME=/tmp",
-        "--env", "CI=true",
-        runner_image,
-        "sh", "-lc", 'cp -R /source/. /workspace/ && exec sh -lc "$1"', "openincident-runner", command,
-    ]
-
     docker_env = {
         "PATH": os.environ.get("PATH", ""),
         "HOME": os.environ.get("HOME", "/tmp"),
     }
     if os.environ.get("DOCKER_CONFIG"):
         docker_env["DOCKER_CONFIG"] = os.environ["DOCKER_CONFIG"]
-    try:
-        completed = subprocess.run(
-            invocation,
-            cwd=str(workspace),
-            env=docker_env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        # Kill only this run's container; never sweep shared Docker resources.
-        subprocess.run(
-            ["docker", "kill", container_name],
-            env=docker_env,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        raise
+
+    # Only the filtered snapshot is exposed to untrusted repository code. Exclusions
+    # apply at every directory depth, including nested .env and credential files.
+    with tempfile.TemporaryDirectory(prefix="openincident-stage-") as staging_root:
+        staged_workspace = Path(staging_root) / "repo"
+        shutil.copytree(workspace, staged_workspace, ignore=_sandbox_ignore)
+        invocation = [
+            "docker", "run", "--rm",
+            "--name", container_name,
+            "--label", "openincident.managed=true",
+            "--init",
+            "--network", network_mode,
+            "--memory", os.environ.get("OPENINCIDENT_TEST_RUNNER_MEMORY", "2g"),
+            "--cpus", os.environ.get("OPENINCIDENT_TEST_RUNNER_CPUS", "2"),
+            "--pids-limit", os.environ.get("OPENINCIDENT_TEST_RUNNER_PIDS", "256"),
+            "--user", "10001:10001",
+            "--read-only",
+            "--tmpfs", "/tmp:rw,exec,nosuid,size=512m,uid=10001,gid=10001",
+            "--tmpfs", "/workspace:rw,exec,nosuid,size=2g,uid=10001,gid=10001",
+            "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges:true",
+            "--mount", f"type=bind,src={staged_workspace},dst=/source,readonly",
+            "--workdir", "/workspace",
+            "--env", "HOME=/tmp",
+            "--env", "CI=true",
+            runner_image,
+            "sh", "-lc", 'cp -R /source/. /workspace/ && exec sh -lc "$1"', "openincident-runner", command,
+        ]
+
+        try:
+            completed = subprocess.run(
+                invocation,
+                cwd=str(staged_workspace),
+                env=docker_env,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            # Kill only this run's container; never sweep shared Docker resources.
+            subprocess.run(
+                ["docker", "kill", container_name],
+                env=docker_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            raise
+
     duration = perf_counter() - started_at
     return TestEnvironmentCommandResult(
         command=command,
