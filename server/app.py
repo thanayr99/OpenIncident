@@ -103,6 +103,7 @@ from server.github_repo import (
 from server.session_store import InMemorySessionStore
 from server.incident_workflow import (
     ALLOWED_TRANSITIONS,
+    IncidentWorkflowApprovalRequest,
     IncidentWorkflowEvent,
     IncidentWorkflowEventRequest,
     IncidentWorkflowStatus,
@@ -739,6 +740,11 @@ def append_incident_workflow_event(
         raise HTTPException(status_code=404, detail="Incident run not found") from exc
     if run.project is None or run.project.project_id != project_id:
         raise HTTPException(status_code=404, detail="Incident run not found")
+    if request.status == IncidentWorkflowStatus.RESOLVED:
+        raise HTTPException(
+            status_code=403,
+            detail="Resolution requires the explicit human approval endpoint",
+        )
 
     history = list_incident_workflow_events(project_id, run_id, authorization)
     current_status = history[-1].status if history else None
@@ -766,6 +772,10 @@ def append_incident_workflow_event(
             "confidence": request.confidence,
         },
     )
+    run.status = request.status.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
     return IncidentWorkflowEvent(
         event_id=event.event_id,
         project_id=project_id,
@@ -776,6 +786,71 @@ def append_incident_workflow_event(
         summary=request.summary,
         evidence=request.evidence,
         confidence=request.confidence,
+        created_at=event.timestamp,
+    )
+
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/approve",
+    response_model=IncidentWorkflowEvent,
+    status_code=201,
+)
+def approve_incident_resolution(
+    project_id: str,
+    run_id: str,
+    request: IncidentWorkflowApprovalRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _, account = _require_project_access(project_id, authorization)
+    if account is None:
+        raise HTTPException(status_code=401, detail="Human authentication required")
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    current_status = history[-1].status if history else None
+    if current_status != IncidentWorkflowStatus.AWAITING_APPROVAL:
+        raise HTTPException(
+            status_code=409,
+            detail="Incident must be awaiting approval before resolution can be approved",
+        )
+
+    event = session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Human approved incident resolution",
+        message=request.summary,
+        severity="info",
+        source="human_approver",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.RESOLVED.value,
+            "agent_role": "human_approver",
+            "workflow_event_type": "human_approval",
+            "approved_by": account.account_id,
+            "evidence": [],
+            "confidence": 1.0,
+        },
+    )
+    run.status = IncidentWorkflowStatus.RESOLVED.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return IncidentWorkflowEvent(
+        event_id=event.event_id,
+        project_id=project_id,
+        run_id=run_id,
+        status=IncidentWorkflowStatus.RESOLVED,
+        agent_role="human_approver",
+        event_type="human_approval",
+        summary=request.summary,
+        evidence=[],
+        confidence=1.0,
         created_at=event.timestamp,
     )
 
