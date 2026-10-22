@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
+from uuid import uuid4
 
 from models import (
     EnvironmentWorkspaceInsight,
@@ -239,38 +242,117 @@ def prepare_workspace(
     return _safe_workspace_child(workspace, config.workdir)
 
 
+_SANDBOX_EXCLUDED_NAMES = {
+    ".git", ".env", ".npmrc", ".pypirc", ".venv", "venv", "node_modules",
+    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist", "build",
+    "coverage", ".next", ".DS_Store",
+}
+_SANDBOX_EXCLUDED_PATTERNS = (
+    ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa", "id_ed25519",
+    "credentials.json", "service-account*.json", "*.secret", "secrets.*",
+)
+
+
+def _sandbox_ignore(_directory: str, names: list[str]) -> set[str]:
+    """Exclude common credentials, VCS metadata, and generated dependencies from staging."""
+    ignored = {name for name in names if name in _SANDBOX_EXCLUDED_NAMES}
+    ignored.update(
+        name
+        for name in names
+        if any(fnmatch.fnmatch(name, pattern) for pattern in _SANDBOX_EXCLUDED_PATTERNS)
+    )
+    return ignored
+
+
 def run_shell_command(
     command: str,
     *,
     cwd: str | Path,
     env: dict[str, str] | None = None,
-    shell_name: str = "powershell",
+    shell_name: str = "sh",
     timeout_seconds: float = 900.0,
 ) -> TestEnvironmentCommandResult:
+    """Execute repository commands in a disposable, resource-limited Docker container.
+
+    A filtered staging copy is mounted read-only; the original workspace is never
+    mounted into the container. Host and project environment variables are not forwarded.
+    Docker is mandatory: there is deliberately no host-shell fallback.
+    """
     started_at = perf_counter()
-    merged_env = os.environ.copy()
-    if env:
-        merged_env.update(env)
+    workspace = Path(cwd).resolve()
+    if not workspace.is_dir():
+        raise ValueError("Sandbox workspace must be an existing directory.")
 
-    if shell_name.lower() == "cmd":
-        invocation = ["cmd.exe", "/c", command]
-    else:
-        invocation = ["powershell.exe", "-Command", command]
+    runner_image = os.environ.get("OPENINCIDENT_TEST_RUNNER_IMAGE", "openincident-test-runner:local")
+    network_mode = os.environ.get("OPENINCIDENT_TEST_RUNNER_NETWORK", "none").strip().lower()
+    if network_mode not in {"none", "bridge"}:
+        raise ValueError("OPENINCIDENT_TEST_RUNNER_NETWORK must be 'none' or 'bridge'.")
 
-    completed = subprocess.run(
-        invocation,
-        cwd=str(cwd),
-        env=merged_env,
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-    )
+    timeout = max(1.0, min(float(timeout_seconds), 1800.0))
+    container_name = f"openincident-test-{uuid4().hex}"
+    docker_env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", "/tmp"),
+    }
+    if os.environ.get("DOCKER_CONFIG"):
+        docker_env["DOCKER_CONFIG"] = os.environ["DOCKER_CONFIG"]
+
+    # Only the filtered snapshot is exposed to untrusted repository code. Exclusions
+    # apply at every directory depth, including nested .env and credential files.
+    with tempfile.TemporaryDirectory(prefix="openincident-stage-") as staging_root:
+        staged_workspace = Path(staging_root) / "repo"
+        shutil.copytree(workspace, staged_workspace, ignore=_sandbox_ignore, symlinks=True)
+        invocation = [
+            "docker", "run", "--rm",
+            "--name", container_name,
+            "--label", "openincident.managed=true",
+            "--init",
+            "--network", network_mode,
+            "--memory", os.environ.get("OPENINCIDENT_TEST_RUNNER_MEMORY", "2g"),
+            "--cpus", os.environ.get("OPENINCIDENT_TEST_RUNNER_CPUS", "2"),
+            "--pids-limit", os.environ.get("OPENINCIDENT_TEST_RUNNER_PIDS", "256"),
+            "--user", "10001:10001",
+            "--read-only",
+            "--tmpfs", "/tmp:rw,exec,nosuid,size=512m,uid=10001,gid=10001",
+            "--tmpfs", "/workspace:rw,exec,nosuid,size=2g,uid=10001,gid=10001",
+            "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges:true",
+            "--mount", f"type=bind,src={staged_workspace},dst=/source,readonly",
+            "--workdir", "/workspace",
+            "--env", "HOME=/tmp",
+            "--env", "CI=true",
+            runner_image,
+            "sh", "-lc", 'cp -R /source/. /workspace/ && exec sh -lc "$1"', "openincident-runner", command,
+        ]
+
+        try:
+            completed = subprocess.run(
+                invocation,
+                cwd=str(staged_workspace),
+                env=docker_env,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            # Kill only this run's container; never sweep shared Docker resources.
+            subprocess.run(
+                ["docker", "kill", container_name],
+                env=docker_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            raise
+
     duration = perf_counter() - started_at
     return TestEnvironmentCommandResult(
         command=command,
         return_code=completed.returncode,
-        stdout=completed.stdout[-12000:],
-        stderr=completed.stderr[-12000:],
+        stdout=(completed.stdout or "")[-12000:],
+        stderr=(completed.stderr or "")[-12000:],
         duration_seconds=round(duration, 3),
         success=completed.returncode == 0,
     )
@@ -359,3 +441,60 @@ def run_test_environment(
         started_at=started_at,
         completed_at=completed_at,
     )
+
+
+def validate_patch_and_run_tests(
+    workspace_path: str | Path,
+    patch: str,
+    *,
+    install_command: str | None,
+    test_command: str | None,
+    timeout_seconds: float = 900.0,
+) -> dict[str, object]:
+    """Apply a text diff to a disposable copy and test it in one isolated container."""
+    import shlex
+
+    workspace = Path(workspace_path).resolve()
+    if not workspace.is_dir():
+        return {"success": False, "stage": "workspace", "summary": "Prepared test workspace is unavailable."}
+    commands = [command for command in (install_command, test_command) if command]
+    if not commands:
+        return {"success": False, "stage": "configuration", "summary": "Configure an install or test command before validating a patch."}
+    issues = [issue for command in commands for issue in validate_test_environment_command(command)]
+    if issues:
+        return {"success": False, "stage": "configuration", "summary": "Unsafe test command configuration: " + " ".join(issues)}
+
+    with tempfile.TemporaryDirectory(prefix="openincident-patch-") as temp_root:
+        candidate = Path(temp_root) / "candidate"
+        shutil.copytree(workspace, candidate, ignore=_sandbox_ignore, symlinks=True)
+        try:
+            subprocess.run(["git", "init", "-q", str(candidate)], check=True, capture_output=True, text=True, timeout=15)
+            subprocess.run(["git", "-C", str(candidate), "add", "-A"], check=True, capture_output=True, text=True, timeout=30)
+            subprocess.run(["git", "-C", str(candidate), "-c", "user.name=OpenIncident", "-c", "user.email=patch-validation@openincident.invalid", "commit", "--allow-empty", "-qm", "Baseline snapshot"], check=True, capture_output=True, text=True, timeout=30)
+            subprocess.run(["git", "-C", str(candidate), "switch", "-c", "openincident/patch-proposal"], check=True, capture_output=True, text=True, timeout=15)
+            check = subprocess.run(["git", "-C", str(candidate), "apply", "--check", "--"], input=patch, check=False, capture_output=True, text=True, timeout=15)
+            if check.returncode != 0:
+                return {"success": False, "stage": "patch_check", "summary": "Patch does not apply cleanly to the prepared workspace.", "stderr": (check.stderr or check.stdout or "Patch applicability check failed.")[-4000:] }
+            applied = subprocess.run(["git", "-C", str(candidate), "apply", "--"], input=patch, check=False, capture_output=True, text=True, timeout=15)
+            if applied.returncode != 0:
+                return {"success": False, "stage": "patch_apply", "summary": "Patch could not be applied to the disposable workspace.", "stderr": (applied.stderr or applied.stdout or "Patch application failed.")[-4000:] }
+            changed = subprocess.run(["git", "-C", str(candidate), "diff", "--name-only"], check=True, capture_output=True, text=True, timeout=15)
+            diff_result = subprocess.run(["git", "-C", str(candidate), "diff", "--"], check=True, capture_output=True, text=True, timeout=15)
+            sequence = " && ".join("sh -lc " + shlex.quote(command) for command in commands)
+            result = run_shell_command(sequence, cwd=candidate, timeout_seconds=min(max(timeout_seconds, 1.0), 1800.0))
+            return {
+                "success": result.success,
+                "stage": "tests" if result.success else "tests_failed",
+                "branch_name": "openincident/patch-proposal",
+                "summary": "Patch validation passed in an isolated branch and test container." if result.success else "Patch applied in an isolated branch, but validation failed.",
+                "return_code": result.return_code,
+                "stdout": result.stdout[-8000:],
+                "stderr": result.stderr[-8000:],
+                "duration_seconds": result.duration_seconds,
+                "changed_files": [line for line in changed.stdout.splitlines() if line][:20],
+                "diff": diff_result.stdout[:100_000],
+            }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "stage": "timeout", "summary": "Patch validation exceeded a bounded setup or git operation timeout."}
+        except (OSError, subprocess.SubprocessError) as exc:
+            return {"success": False, "stage": "runner_error", "summary": "Patch validation could not start safely.", "error": str(exc)[:1000]}

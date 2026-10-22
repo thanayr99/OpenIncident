@@ -110,6 +110,16 @@ export function MainStage({
   runPredeployGate,
   runMissionControl,
   triageFirstIncident,
+  investigateFirstIncident,
+  incidentWorkflowEvents = [],
+  incidentWorkflowRunId,
+  runIncidentGuardianReview,
+  requestIncidentApproval,
+  approveIncidentResolution,
+  patchProposalText,
+  setPatchProposalText,
+  proposeIncidentPatch,
+  generateIncidentPatchDraft,
   busy,
   launchDemoFlow,
 }) {
@@ -168,6 +178,18 @@ export function MainStage({
   const latestConversationItems = (conversations.length ? conversations : fallbackMessages).slice(0, 8);
   const latestHandoffItems = (handoffs.length ? handoffs.slice(0, 7).reverse() : fallbackHandoffs);
   const recentEvidenceEvents = (recentEvents || []).slice(0, 6);
+  const latestIncidentWorkflowEvent = incidentWorkflowEvents[incidentWorkflowEvents.length - 1] || null;
+  const guardianReviewEvent = [...incidentWorkflowEvents].reverse().find((event) => event.event_type === "guardian_review");
+  const latestPatchEvent = [...incidentWorkflowEvents].reverse().find((event) => event.event_type === "patch_proposal_validation");
+  const latestPatchProposal = latestPatchEvent?.evidence?.find((item) => item.kind === "patch_proposal");
+  const latestPatchValidation = latestPatchEvent?.evidence?.find((item) => item.kind === "patch_validation");
+  const guardianDecision = guardianReviewEvent?.evidence?.find((item) => item.kind === "guardian_decision")?.decision;
+  const canRequestIncidentApproval = Boolean(
+    guardianReviewEvent &&
+    guardianDecision === "ready_for_human_approval" &&
+    latestIncidentWorkflowEvent?.event_type === "guardian_review"
+  );
+  const canApproveIncident = latestIncidentWorkflowEvent?.status === "awaiting_approval";
   const trainingDetailMap = {
     planner: {
       title: "Planner dataset records",
@@ -787,6 +809,118 @@ export function MainStage({
                 <h2>Incident Evidence</h2>
                 <span>{activeRuns.length} active</span>
               </header>
+              <button
+                className="primary-action"
+                onClick={investigateFirstIncident}
+                disabled={!activeRuns.length || busy.investigate}
+                type="button"
+              >
+                {busy.investigate ? "Investigating..." : "Investigate first incident"}
+              </button>
+              <button
+                className="primary-action"
+                onClick={runIncidentGuardianReview}
+                disabled={!incidentWorkflowRunId || busy.guardianReview}
+                type="button"
+              >
+                {busy.guardianReview ? "Reviewing readiness..." : "Run Test Guardian review"}
+              </button>
+              <button
+                className="primary-action"
+                onClick={requestIncidentApproval}
+                disabled={!canRequestIncidentApproval || busy.requestApproval}
+                type="button"
+              >
+                {busy.requestApproval ? "Requesting approval..." : "Request human approval"}
+              </button>
+              <button
+                className="primary-action"
+                onClick={approveIncidentResolution}
+                disabled={!canApproveIncident || busy.approveIncident}
+                type="button"
+              >
+                {busy.approveIncident ? "Recording approval..." : "Approve incident resolution"}
+              </button>
+
+              <label className="field-label" htmlFor="incident-patch-diff">Proposed unified diff</label>
+              <textarea
+                id="incident-patch-diff"
+                value={patchProposalText}
+                onChange={(event) => setPatchProposalText(event.target.value)}
+                placeholder={"Paste a reviewed unified diff here, starting with diff --git a/file b/file"}
+                rows={8}
+                spellCheck={false}
+                style={{ width: "100%", boxSizing: "border-box", fontFamily: "monospace", fontSize: "12px", resize: "vertical", padding: "10px", borderRadius: "8px" }}
+              />
+              <button
+                className="primary-action"
+                onClick={generateIncidentPatchDraft}
+                disabled={!incidentWorkflowRunId || busy.generatePatch}
+                type="button"
+              >
+                {busy.generatePatch ? "Generating patch draft..." : "Generate patch draft with AI"}
+              </button>
+              <button
+                className="primary-action"
+                onClick={proposeIncidentPatch}
+                disabled={!incidentWorkflowRunId || !patchProposalText.trim() || busy.patchProposal}
+                type="button"
+              >
+                {busy.patchProposal ? "Applying in sandbox and testing..." : "Validate patch in isolated sandbox"}
+              </button>
+
+              {incidentWorkflowRunId ? (
+                <div className="incident-timeline">
+                  <div className="signal-row">
+                    <span>Workflow timeline</span>
+                    <strong>{incidentWorkflowEvents.length} events</strong>
+                  </div>
+                  {incidentWorkflowEvents.map((event) => (
+                    <button
+                      className="signal-row signal-button"
+                      key={event.event_id}
+                      onClick={() => setDetailPanel({
+                        title: event.event_type || "Incident workflow event",
+                        subtitle: "Incident " + incidentWorkflowRunId.slice(0, 8) + " · " + (event.agent_role || "workflow"),
+                        groups: [{
+                          id: event.event_id,
+                          title: event.summary || event.event_type,
+                          rows: [
+                            ["Status", event.status || "unknown"],
+                            ["Agent", event.agent_role || "unknown"],
+                            ["Confidence", event.confidence == null ? "Not provided" : Math.round(event.confidence * 100) + "%"],
+                            ["Time", formatTime(event.created_at)],
+                            ["Evidence", (event.evidence || []).map((item) => JSON.stringify(item)).join(" | ") || "No evidence attached"],
+                          ],
+                        }],
+                      })}
+                      type="button"
+                    >
+                      <span>{formatTime(event.created_at)}</span>
+                      <strong>{event.agent_role}: {event.event_type}</strong>
+                    </button>
+                  ))}
+                  {latestPatchProposal ? (
+                    <section className="overview-card" style={{ marginTop: "12px" }}>
+                      <header>
+                        <h3>Latest patch proposal</h3>
+                        <span>{latestPatchValidation?.success ? "Tests passed" : "Needs changes"}</span>
+                      </header>
+                      <p>{latestPatchProposal.summary}</p>
+                      <p className="muted">
+                        Sandbox branch: {latestPatchValidation?.branch_name || "openincident/patch-proposal"}
+                        {" · "}Files: {(latestPatchProposal.changed_files || []).join(", ") || "Not available"}
+                      </p>
+                      <pre style={{ maxHeight: "320px", overflow: "auto", whiteSpace: "pre", fontSize: "12px", padding: "12px", borderRadius: "8px" }}>
+                        {latestPatchProposal.diff}
+                      </pre>
+                      <p>{latestPatchValidation?.summary || "Validation result unavailable."}</p>
+                      {latestPatchValidation?.stdout ? <pre style={{ maxHeight: "160px", overflow: "auto", whiteSpace: "pre-wrap", fontSize: "11px" }}>{latestPatchValidation.stdout}</pre> : null}
+                      {latestPatchValidation?.stderr ? <pre style={{ maxHeight: "160px", overflow: "auto", whiteSpace: "pre-wrap", fontSize: "11px" }}>{latestPatchValidation.stderr}</pre> : null}
+                    </section>
+                  ) : null}
+                </div>
+              ) : null}
               {activeRuns.length ? activeRuns.slice(0, 4).map((run) => (
                 <button className="signal-row signal-button" key={run.run_id} onClick={() => setDetailPanel({
                   title: "Incident run detail",

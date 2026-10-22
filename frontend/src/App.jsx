@@ -153,6 +153,9 @@ export default function App() {
   const [frontendDiscovery, setFrontendDiscovery] = useState(null);
   const [latestCheck, setLatestCheck] = useState(null);
   const [predeployResult, setPredeployResult] = useState(null);
+  const [incidentWorkflowEvents, setIncidentWorkflowEvents] = useState([]);
+  const [incidentWorkflowRunId, setIncidentWorkflowRunId] = useState(null);
+  const [patchProposalText, setPatchProposalText] = useState("");
   const [stories, setStories] = useState([]);
   const [logs, setLogs] = useState([]);
   const [logSummary, setLogSummary] = useState(null);
@@ -926,6 +929,119 @@ export default function App() {
     });
   }
 
+  async function investigateFirstIncident() {
+    const run = activeRuns[0];
+    if (!run) {
+      setMessage("No active incident to investigate.");
+      return;
+    }
+    await runTask("investigate", async () => {
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + run.run_id + "/investigate",
+        {
+          method: "POST",
+          body: JSON.stringify({ query: run.trigger_reason || "incident failure" }),
+        },
+      );
+      setIncidentWorkflowEvents(timeline);
+      setIncidentWorkflowRunId(run.run_id);
+      setMessage("Investigation complete: " + timeline.length + " workflow events recorded.");
+      await refreshSummary(selectedProjectId);
+      setStageView("evidence");
+    });
+  }
+  async function generateIncidentPatchDraft() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId) {
+      setMessage("Investigate an incident before generating a patch draft.");
+      return;
+    }
+    await runTask("generatePatch", async () => {
+      const draft = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/patch-proposals/generate",
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setPatchProposalText(draft.patch);
+      setMessage(draft.summary + " Model: " + draft.model + ". Context files: " + draft.context_files.join(", "));
+    });
+  }
+  async function proposeIncidentPatch() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId || !patchProposalText.trim()) {
+      setMessage("Investigate an incident and provide a unified diff before validating a patch.");
+      return;
+    }
+    await runTask("patchProposal", async () => {
+      const event = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/patch-proposals",
+        {
+          method: "POST",
+          body: JSON.stringify({ summary: "Proposed incident fix", patch: patchProposalText }),
+        },
+      );
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/workflow",
+      );
+      setIncidentWorkflowEvents(timeline);
+      setMessage(event.summary);
+      await refreshSummary(selectedProjectId);
+      setStageView("evidence");
+    });
+  }
+  async function runIncidentGuardianReview() {
+    const runId = incidentWorkflowRunId || activeRuns[0]?.run_id;
+    if (!runId || !selectedProjectId) {
+      setMessage("Investigate an incident before requesting Guardian review.");
+      return;
+    }
+    await runTask("guardianReview", async () => {
+      const event = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/guardian-review",
+        { method: "POST" },
+      );
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/workflow",
+      );
+      setIncidentWorkflowEvents(timeline);
+      setIncidentWorkflowRunId(runId);
+      setMessage("Guardian review: " + event.summary);
+      await refreshSummary(selectedProjectId);
+      setStageView("evidence");
+    });
+  }
+  async function requestIncidentApproval() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId) return;
+    await runTask("requestApproval", async () => {
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/request-approval",
+        { method: "POST" },
+      );
+      setIncidentWorkflowEvents(timeline);
+      setMessage("Incident is awaiting your explicit approval. No code was merged or deployed.");
+      await refreshSummary(selectedProjectId);
+    });
+  }
+
+  async function approveIncidentResolution() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId) return;
+    await runTask("approveIncident", async () => {
+      await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/approve",
+        {
+          method: "POST",
+          body: JSON.stringify({ summary: "Human reviewed the incident evidence and explicitly approved resolution." }),
+        },
+      );
+      const timeline = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/workflow",
+      );
+      setIncidentWorkflowEvents(timeline);
+      setMessage("Incident resolution approved and recorded. No deployment was triggered.");
+      await refreshSummary(selectedProjectId);
+    });
+  }
   async function triageFirstIncident() {
     const run = activeRuns[0];
     if (!run) {
@@ -1279,6 +1395,16 @@ export default function App() {
         runPredeployGate={runPredeployGate}
         runMissionControl={runMissionControl}
         triageFirstIncident={triageFirstIncident}
+        investigateFirstIncident={investigateFirstIncident}
+        incidentWorkflowEvents={incidentWorkflowEvents}
+        incidentWorkflowRunId={incidentWorkflowRunId}
+        runIncidentGuardianReview={runIncidentGuardianReview}
+        requestIncidentApproval={requestIncidentApproval}
+        approveIncidentResolution={approveIncidentResolution}
+        patchProposalText={patchProposalText}
+        setPatchProposalText={setPatchProposalText}
+        proposeIncidentPatch={proposeIncidentPatch}
+        generateIncidentPatchDraft={generateIncidentPatchDraft}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
         runInstantAgentDemo={runInstantAgentDemo}

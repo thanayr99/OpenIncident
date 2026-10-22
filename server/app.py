@@ -101,9 +101,22 @@ from server.github_repo import (
     inspect_repository_for_story,
 )
 from server.session_store import InMemorySessionStore
+from server.incident_workflow import (
+    ALLOWED_TRANSITIONS,
+    IncidentInvestigationRequest,
+    IncidentPatchDraftResponse,
+    IncidentPatchGenerationRequest,
+    IncidentPatchProposalRequest,
+    IncidentWorkflowApprovalRequest,
+    IncidentWorkflowEvent,
+    IncidentWorkflowEventRequest,
+    IncidentWorkflowStatus,
+    validate_patch_proposal,
+)
 from server.story_engine import build_generated_test_plan, execute_api_story, execute_frontend_story
-from server.test_environment import run_test_environment, validate_test_environment_commands
+from server.test_environment import run_test_environment, validate_patch_and_run_tests, validate_test_environment_commands
 from server.triage import build_run_triage
+from server.patch_agent import PatchDraftUnavailable, generate_patch_draft
 
 
 def _story_result_to_snapshot(result: UserStoryExecutionResult, story: UserStoryRecord) -> ProjectValidationSnapshot | None:
@@ -671,6 +684,713 @@ def list_project_events(
         return session_store.list_project_events(project_id, limit=limit)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get(
+    "/projects/{project_id}/incidents/{run_id}/workflow",
+    response_model=list[IncidentWorkflowEvent],
+)
+def list_incident_workflow_events(
+    project_id: str,
+    run_id: str,
+    authorization: str | None = Header(default=None),
+) -> list[IncidentWorkflowEvent]:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    records = []
+    for event in session_store.list_project_events(project_id):
+        if event.event_type != "incident_workflow" or event.related_run_id != run_id:
+            continue
+        try:
+            records.append(
+                IncidentWorkflowEvent(
+                    event_id=event.event_id,
+                    project_id=project_id,
+                    run_id=run_id,
+                    status=event.metadata["status"],
+                    agent_role=event.metadata["agent_role"],
+                    event_type=event.metadata["workflow_event_type"],
+                    summary=event.message,
+                    evidence=event.metadata.get("evidence", []),
+                    confidence=event.metadata.get("confidence"),
+                    created_at=event.timestamp,
+                )
+            )
+        except (KeyError, ValueError):
+            # Ignore malformed historical entries rather than failing the whole timeline.
+            continue
+    return sorted(records, key=lambda item: item.created_at)
+
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/workflow",
+    response_model=IncidentWorkflowEvent,
+    status_code=201,
+)
+def append_incident_workflow_event(
+    project_id: str,
+    run_id: str,
+    request: IncidentWorkflowEventRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+    if request.status == IncidentWorkflowStatus.RESOLVED:
+        raise HTTPException(
+            status_code=403,
+            detail="Resolution requires the explicit human approval endpoint",
+        )
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    current_status = history[-1].status if history else None
+    if request.status not in ALLOWED_TRANSITIONS[current_status]:
+        current_label = current_status.value if current_status else "not_started"
+        raise HTTPException(
+            status_code=409,
+            detail=f"Invalid incident transition: {current_label} -> {request.status.value}",
+        )
+
+    event = session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title=request.event_type,
+        message=request.summary,
+        severity="error" if request.status == IncidentWorkflowStatus.FAILED else "info",
+        source=request.agent_role,
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": request.status.value,
+            "agent_role": request.agent_role,
+            "workflow_event_type": request.event_type,
+            "evidence": request.evidence,
+            "confidence": request.confidence,
+        },
+    )
+    run.status = request.status.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return IncidentWorkflowEvent(
+        event_id=event.event_id,
+        project_id=project_id,
+        run_id=run_id,
+        status=request.status,
+        agent_role=request.agent_role,
+        event_type=request.event_type,
+        summary=request.summary,
+        evidence=request.evidence,
+        confidence=request.confidence,
+        created_at=event.timestamp,
+    )
+
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/investigate",
+    response_model=list[IncidentWorkflowEvent],
+)
+def investigate_incident(
+    project_id: str,
+    run_id: str,
+    request: IncidentInvestigationRequest | None = None,
+    authorization: str | None = Header(default=None),
+) -> list[IncidentWorkflowEvent]:
+    project, _ = _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if history and history[-1].status in {
+        IncidentWorkflowStatus.RESOLVED,
+        IncidentWorkflowStatus.CANCELLED,
+        IncidentWorkflowStatus.AWAITING_APPROVAL,
+    }:
+        raise HTTPException(status_code=409, detail="Incident is not eligible for another investigation")
+
+    if not history:
+        initial_reason = run.trigger_reason or "Incident investigation requested."
+        session_store._record_event(
+            project_id,
+            event_type="incident_workflow",
+            title="Incident investigation initialized",
+            message=initial_reason,
+            severity="warning",
+            source="orchestrator",
+            related_run_id=run_id,
+            related_session_id=run.session_id,
+            metadata={
+                "status": IncidentWorkflowStatus.DETECTED.value,
+                "agent_role": "orchestrator",
+                "workflow_event_type": "incident_initialized",
+                "evidence": [{"kind": "incident_run", "source": run.source}],
+                "confidence": 1.0,
+            },
+        )
+        history = list_incident_workflow_events(project_id, run_id, authorization)
+
+    current_status = history[-1].status
+    if IncidentWorkflowStatus.INVESTIGATING not in ALLOWED_TRANSITIONS[current_status]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Incident cannot be investigated from {current_status.value}",
+        )
+
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Investigation started",
+        message="Orchestrator started bounded log, repository and triage analysis.",
+        severity="info",
+        source="orchestrator",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "orchestrator",
+            "workflow_event_type": "investigation_started",
+            "evidence": [],
+            "confidence": None,
+        },
+    )
+
+    log_entries = session_store.list_project_logs(project_id)[:20]
+    log_evidence = [
+        {
+            "kind": "log_entry",
+            "timestamp": entry.timestamp.isoformat(),
+            "severity": entry.level,
+            "source": entry.source,
+            "message": entry.message[:500],
+        }
+        for entry in log_entries
+    ]
+    log_summary = session_store.get_project_log_summary(project_id)
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Log Analyst findings",
+        message=(
+            f"Reviewed {log_summary.total_entries} log entries: "
+            f"{log_summary.error_entries} errors and {log_summary.warning_entries} warnings."
+            if log_summary.total_entries
+            else "No project log entries are available yet; log-based diagnosis remains incomplete."
+        ),
+        severity="info",
+        source="log_analyst",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "log_analyst",
+            "workflow_event_type": "log_analysis",
+            "evidence": log_evidence,
+            "confidence": 0.65 if log_entries else 0.0,
+        },
+    )
+
+    query = (request.query if request else None) or run.trigger_reason or "incident failure"
+    repo_result = inspect_repository_for_query(project, query[:500])
+    repo_evidence = [
+        {
+            "kind": "repository_match",
+            "path": match.path,
+            "score": match.score,
+            "reason": match.reason,
+            "snippet": (match.snippet or "")[:500],
+        }
+        for match in repo_result.matches[:10]
+    ]
+    if repo_result.error_message:
+        repo_evidence.append({"kind": "repository_inspection_error", "message": repo_result.error_message[:500]})
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Code Investigator findings",
+        message=(
+            f"Repository inspection found {len(repo_result.matches)} candidate code location(s) for the incident query."
+            if repo_result.matches
+            else f"Repository inspection returned no matching code locations. {repo_result.error_message or 'More evidence is needed.'}"
+        ),
+        severity="info",
+        source="code_investigator",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "code_investigator",
+            "workflow_event_type": "repository_investigation",
+            "evidence": repo_evidence,
+            "confidence": min(0.85, max((match.score for match in repo_result.matches), default=0.0)),
+            "query": query[:500],
+        },
+    )
+
+    triage = build_run_triage(session_store, run.session_id)
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Triage summary",
+        message=(
+            f"{triage.summary} Suspected cause (unverified): {triage.suspected_root_cause}"
+        )[:2000],
+        severity="info",
+        source="triage",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.INVESTIGATING.value,
+            "agent_role": "triage",
+            "workflow_event_type": "triage_summary",
+            "evidence": [{"kind": "triage_evidence", "summary": item[:500]} for item in triage.evidence[:10]],
+            "confidence": triage.confidence,
+            "recommended_actions": [item.model_dump(mode="json") for item in triage.recommended_actions[:10]],
+            "suspected_root_cause": triage.suspected_root_cause,
+        },
+    )
+    run.status = IncidentWorkflowStatus.INVESTIGATING.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return list_incident_workflow_events(project_id, run_id, authorization)
+
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/guardian-review",
+    response_model=IncidentWorkflowEvent,
+)
+def review_incident_readiness(
+    project_id: str,
+    run_id: str,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+        project = session_store.get_project(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident or project not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if not history or history[-1].status not in {
+        IncidentWorkflowStatus.INVESTIGATING,
+        IncidentWorkflowStatus.TESTING,
+        IncidentWorkflowStatus.FAILED,
+    }:
+        raise HTTPException(status_code=409, detail="Incident must be investigated before Guardian review")
+
+    report = session_store.build_story_report(project_id)
+    checks = session_store.list_validation_snapshots(project_id)
+    latest_check = checks[-1] if checks else None
+    latest_patch_event = next(
+        (item for item in reversed(history) if item.event_type == "patch_proposal_validation"),
+        None,
+    )
+    latest_patch_validation = next(
+        (item for item in latest_patch_event.evidence if item.get("kind") == "patch_validation"),
+        None,
+    ) if latest_patch_event else None
+    open_runs = [
+        item for item in session_store.list_runs(project_id)
+        if item.status != "resolved" and item.run_id != run_id
+    ]
+    evidence = [
+        {
+            "kind": "story_report",
+            "total_stories": report.total_stories,
+            "completed_stories": report.completed_stories,
+            "failed_stories": report.failed_stories,
+            "blocked_stories": report.blocked_stories,
+            "pending_stories": report.pending_stories,
+        },
+        {
+            "kind": "latest_validation_check",
+            "available": latest_check is not None,
+            "status": latest_check.status if latest_check else None,
+            "check_type": latest_check.check_type if latest_check else None,
+            "timestamp": latest_check.checked_at.isoformat() if latest_check else None,
+        },
+        {
+            "kind": "open_incidents",
+            "count": len(open_runs),
+            "run_ids": [item.run_id for item in open_runs[:10]],
+        },
+        {
+            "kind": "latest_patch_validation",
+            "available": latest_patch_validation is not None,
+            "success": latest_patch_validation.get("success") if latest_patch_validation else None,
+            "summary": latest_patch_validation.get("summary") if latest_patch_validation else None,
+        },
+    ]
+    blockers = []
+    if report.total_stories == 0:
+        blockers.append("No user stories are registered; coverage is unknown.")
+    if report.failed_stories:
+        blockers.append(f"{report.failed_stories} user story/stories failed.")
+    if report.blocked_stories:
+        blockers.append(f"{report.blocked_stories} user story/stories are blocked.")
+    if report.pending_stories:
+        blockers.append(f"{report.pending_stories} user story/stories remain pending.")
+    if latest_check is None:
+        blockers.append("No recorded validation check is available.")
+    elif latest_check.checked_at < run.created_at:
+        blockers.append("The latest recorded validation check predates this incident; a fresh check is required.")
+    elif latest_check.status != "healthy":
+        blockers.append(f"The latest recorded validation check is {latest_check.status}, not healthy.")
+    if latest_patch_validation is not None and not latest_patch_validation.get("success"):
+        blockers.append("The latest proposed patch did not pass isolated validation.")
+    if open_runs:
+        blockers.append(f"{len(open_runs)} other incident run(s) remain unresolved.")
+
+    decision = "blocked" if blockers else "ready_for_human_approval"
+    evidence.append({
+        "kind": "guardian_decision",
+        "decision": decision,
+        "blockers": blockers,
+        "automatic_deploy": False,
+    })
+    summary = (
+        "Guardian blocked readiness: " + " ".join(blockers)
+        if blockers
+        else "Recorded story, check, and incident signals meet the preliminary readiness rules. Human approval is still required."
+    )
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Test Guardian readiness review",
+        message=summary[:2000],
+        severity="warning" if blockers else "info",
+        source="test_guardian",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": history[-1].status.value,
+            "agent_role": "test_guardian",
+            "workflow_event_type": "guardian_review",
+            "evidence": evidence,
+            "confidence": 1.0 if latest_check is not None and report.total_stories else 0.0,
+            "decision": decision,
+            "blockers": blockers,
+            "automatic_deploy": False,
+        },
+    )
+    records = list_incident_workflow_events(project_id, run_id, authorization)
+    return records[-1]
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/patch-proposals/generate",
+    response_model=IncidentPatchDraftResponse,
+)
+def generate_incident_patch_proposal(
+    project_id: str,
+    run_id: str,
+    request: IncidentPatchGenerationRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentPatchDraftResponse:
+    project, _ = _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if not history or history[-1].status not in {
+        IncidentWorkflowStatus.INVESTIGATING,
+        IncidentWorkflowStatus.TESTING,
+        IncidentWorkflowStatus.FAILED,
+    }:
+        raise HTTPException(status_code=409, detail="Investigate the incident before generating a patch draft.")
+
+    if not os.getenv("HF_TOKEN", "").strip():
+        raise HTTPException(status_code=503, detail="AI patch drafting is not configured. Set HF_TOKEN or paste a diff manually.")
+    query = (request.query or run.trigger_reason or "production incident failure").strip()[:500]
+    try:
+        inspection = inspect_repository_for_query(project, query)
+        code_context = [
+            {"path": match.path, "snippet": match.snippet or ""}
+            for match in inspection.matches[:8]
+            if match.snippet
+        ]
+        logs = [
+            {
+                "timestamp": entry.timestamp.isoformat(),
+                "level": entry.level,
+                "source": entry.source,
+                "message": entry.message,
+            }
+            for entry in session_store.list_project_logs(project_id)[:10]
+        ]
+        patch, model = generate_patch_draft(
+            query=query,
+            incident_summary=run.trigger_reason or query,
+            logs=logs,
+            code_context=code_context,
+        )
+    except PatchDraftUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Patch draft generation failed. Check the configured model provider and repository context.") from exc
+
+    return IncidentPatchDraftResponse(
+        summary="Generated draft only. Review the diff and run isolated validation before relying on it.",
+        patch=patch,
+        model=model,
+        context_files=[item["path"] for item in code_context],
+    )
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/patch-proposals",
+    response_model=IncidentWorkflowEvent,
+    status_code=201,
+)
+def propose_and_validate_incident_patch(
+    project_id: str,
+    run_id: str,
+    request: IncidentPatchProposalRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+        config = session_store.get_test_environment_config(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail="Configure the project test environment before validating a patch.") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+    if not config.enabled:
+        raise HTTPException(status_code=409, detail="The project test environment is disabled.")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    current_status = history[-1].status if history else None
+    if current_status not in {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.TESTING, IncidentWorkflowStatus.FAILED}:
+        raise HTTPException(status_code=409, detail="Investigate the incident before proposing a patch.")
+
+    patch_issues = validate_patch_proposal(request.patch)
+    if patch_issues:
+        raise HTTPException(status_code=422, detail={"message": "Patch proposal rejected by safety validation.", "issues": patch_issues})
+    if not config.test_command:
+        raise HTTPException(status_code=409, detail="Configure a regression test command before validating a patch.")
+    workspace = session_store.get_latest_test_environment_workspace(project_id)
+    if not workspace or not Path(workspace).is_dir():
+        raise HTTPException(status_code=409, detail="Prepare the project test workspace before proposing a patch.")
+
+    validation = validate_patch_and_run_tests(
+        workspace,
+        request.patch,
+        install_command=config.install_command,
+        test_command=config.test_command,
+        timeout_seconds=900.0,
+    )
+    next_status = IncidentWorkflowStatus.TESTING if validation.get("success") else IncidentWorkflowStatus.FAILED
+    evidence = [
+        {
+            "kind": "patch_proposal",
+            "summary": request.summary,
+            "diff": request.patch,
+            "changed_files": validation.get("changed_files", []),
+        },
+        {
+            "kind": "patch_validation",
+            "branch_name": validation.get("branch_name", "openincident/patch-proposal"),
+            "success": bool(validation.get("success")),
+            "stage": validation.get("stage", "unknown"),
+            "summary": validation.get("summary", "Validation did not return a summary."),
+            "return_code": validation.get("return_code"),
+            "stdout": validation.get("stdout", ""),
+            "stderr": validation.get("stderr", validation.get("error", "")),
+            "duration_seconds": validation.get("duration_seconds"),
+        },
+    ]
+    event = session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Patch proposal validation " + ("passed" if validation.get("success") else "failed"),
+        message=str(validation.get("summary", "Patch validation completed."))[:2000],
+        severity="info" if validation.get("success") else "error",
+        source="patch_validation_agent",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": next_status.value,
+            "agent_role": "patch_validation_agent",
+            "workflow_event_type": "patch_proposal_validation",
+            "evidence": evidence,
+            "confidence": 1.0 if validation.get("success") else 0.0,
+        },
+    )
+    run.status = next_status.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return IncidentWorkflowEvent(
+        event_id=event.event_id,
+        project_id=project_id,
+        run_id=run_id,
+        status=next_status,
+        agent_role="patch_validation_agent",
+        event_type="patch_proposal_validation",
+        summary=str(validation.get("summary", "Patch validation completed."))[:2000],
+        evidence=evidence,
+        confidence=1.0 if validation.get("success") else 0.0,
+        created_at=event.timestamp,
+    )
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/request-approval",
+    response_model=list[IncidentWorkflowEvent],
+)
+def request_incident_human_approval(
+    project_id: str,
+    run_id: str,
+    authorization: str | None = Header(default=None),
+) -> list[IncidentWorkflowEvent]:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if not history or history[-1].event_type != "guardian_review":
+        raise HTTPException(status_code=409, detail="Run Guardian review before requesting approval")
+    guardian_evidence = next(
+        (item for item in history[-1].evidence if item.get("kind") == "guardian_decision"),
+        None,
+    )
+    if not guardian_evidence or guardian_evidence.get("decision") != "ready_for_human_approval":
+        raise HTTPException(status_code=409, detail="Guardian blocked readiness; resolve the listed blockers first")
+    current_status = history[-1].status
+    if current_status not in {IncidentWorkflowStatus.INVESTIGATING, IncidentWorkflowStatus.TESTING}:
+        raise HTTPException(status_code=409, detail=f"Incident cannot request approval from {current_status.value}")
+
+    if current_status == IncidentWorkflowStatus.INVESTIGATING:
+        session_store._record_event(
+            project_id,
+            event_type="incident_workflow",
+            title="Guardian accepted recorded validation evidence",
+            message="Existing completed story results and a fresh healthy check passed the preliminary gate. This endpoint did not execute tests.",
+            severity="info",
+            source="test_guardian",
+            related_run_id=run_id,
+            related_session_id=run.session_id,
+            metadata={
+                "status": IncidentWorkflowStatus.TESTING.value,
+                "agent_role": "test_guardian",
+                "workflow_event_type": "validation_evidence_accepted",
+                "evidence": history[-1].evidence,
+                "confidence": history[-1].confidence,
+            },
+            persist=False,
+        )
+
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Awaiting human approval",
+        message="Guardian readiness conditions passed. A human must explicitly approve incident resolution; no code was merged and no deployment was triggered.",
+        severity="warning",
+        source="orchestrator",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.AWAITING_APPROVAL.value,
+            "agent_role": "orchestrator",
+            "workflow_event_type": "awaiting_human_approval",
+            "evidence": [{"kind": "guardian_decision", "decision": "ready_for_human_approval"}],
+            "confidence": history[-1].confidence,
+        },
+        persist=False,
+    )
+    run.status = IncidentWorkflowStatus.AWAITING_APPROVAL.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return list_incident_workflow_events(project_id, run_id, authorization)
+
+@app.post(
+    "/projects/{project_id}/incidents/{run_id}/approve",
+    response_model=IncidentWorkflowEvent,
+    status_code=201,
+)
+def approve_incident_resolution(
+    project_id: str,
+    run_id: str,
+    request: IncidentWorkflowApprovalRequest,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _, account = _require_project_access(project_id, authorization)
+    if account is None:
+        raise HTTPException(status_code=401, detail="Human authentication required")
+    try:
+        run = session_store.get_run_by_id(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident run not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    current_status = history[-1].status if history else None
+    if current_status != IncidentWorkflowStatus.AWAITING_APPROVAL:
+        raise HTTPException(
+            status_code=409,
+            detail="Incident must be awaiting approval before resolution can be approved",
+        )
+
+    event = session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Human approved incident resolution",
+        message=request.summary,
+        severity="info",
+        source="human_approver",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": IncidentWorkflowStatus.RESOLVED.value,
+            "agent_role": "human_approver",
+            "workflow_event_type": "human_approval",
+            "approved_by": account.account_id,
+            "evidence": [],
+            "confidence": 1.0,
+        },
+    )
+    run.status = IncidentWorkflowStatus.RESOLVED.value
+    run.updated_at = datetime.now(timezone.utc)
+    session_store._write_run(run)
+    session_store._save()
+    return IncidentWorkflowEvent(
+        event_id=event.event_id,
+        project_id=project_id,
+        run_id=run_id,
+        status=IncidentWorkflowStatus.RESOLVED,
+        agent_role="human_approver",
+        event_type="human_approval",
+        summary=request.summary,
+        evidence=[],
+        confidence=1.0,
+        created_at=event.timestamp,
+    )
 
 
 @app.get("/projects/{project_id}/summary", response_model=ProjectCommandCenterSummary)

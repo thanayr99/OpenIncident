@@ -65,6 +65,45 @@ class JsonStateBackend:
     def append_project_event(self, payload: dict[str, Any]) -> None:
         return
 
+    def upsert_monitor(self, project_id: str, payload: dict[str, Any]) -> None:
+        return
+
+    def upsert_monitor_trigger(self, project_id: str, payload: dict[str, Any]) -> None:
+        return
+
+    def upsert_health_snapshot(self, payload: dict[str, Any]) -> None:
+        return
+
+    def append_validation_snapshot(self, payload: dict[str, Any]) -> None:
+        return
+
+    def upsert_test_environment_config(self, project_id: str, payload: dict[str, Any]) -> None:
+        return
+
+    def append_test_environment_run(self, project_id: str, payload: dict[str, Any]) -> None:
+        return
+
+    def get_database_overview(self) -> dict[str, Any]:
+        state = self.load_state()
+        return {
+            "engine": "json",
+            "database_url": str(self.store_path.resolve()),
+            "app_state_namespaces": list(state.keys()),
+            "tables": [],
+        }
+
+    def get_migration_status(self) -> dict[str, Any]:
+        return {"engine": "json", "current_version": "json-file", "migrations": []}
+
+    def list_table_rows(self, table_name: str, limit: int = 50) -> list[dict[str, Any]]:
+        allowed = {"app_state", "auth_accounts", "auth_tokens", "projects", "stories", "runs", "project_logs", "project_metrics", "project_events", "website_monitors", "monitor_triggers", "health_snapshots", "validation_snapshots", "test_environment_configs", "test_environment_runs"}
+        if table_name not in allowed:
+            raise KeyError(f"Unsupported table: {table_name}")
+        if table_name != "app_state":
+            return []
+        state = self.load_state()
+        return [{"namespace": key, "payload": value} for key, value in list(state.items())[:max(0, min(limit, 500))]]
+
 
 class SqlAlchemyStateBackend:
     _MIGRATIONS = (

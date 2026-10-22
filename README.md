@@ -322,3 +322,7 @@ Deterministic fallback policy targets:
 [STEP] step=1 action=inspect_logs reward=0.11 done=false error=null
 [END] success=true steps=5 score=1.00 rewards=0.11,0.16,0.61,1.00,1.00
 ```
+
+## Repository Test Runner Security
+
+Repository commands should run in the isolated test-runner container, not directly on the API host. See [the runner security model and setup guide](docs/ISOLATED_TEST_RUNNER.md) and the [OpenIncident X Milestone 1 plan](docs/OPENINCIDENT_X_MILESTONE_1.md). The runner defaults to no network access; package installation requiring internet access needs a separately reviewed egress strategy.
