@@ -438,6 +438,7 @@ def test_patch_generation_returns_validated_draft_from_repository_context(
         "inspect_repository_for_query",
         lambda project, query: SimpleNamespace(matches=[SimpleNamespace(path="app.py", snippet="def f(): return 'old'")]),
     )
+    monkeypatch.setenv("HF_TOKEN", "test-token")
     monkeypatch.setattr(appmod, "generate_patch_draft", lambda **kwargs: (patch, "test-model"))
 
     response = client.post(
