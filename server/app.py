@@ -995,6 +995,14 @@ def review_incident_readiness(
     report = session_store.build_story_report(project_id)
     checks = session_store.list_validation_snapshots(project_id)
     latest_check = checks[-1] if checks else None
+    latest_patch_event = next(
+        (item for item in reversed(history) if item.event_type == "patch_proposal_validation"),
+        None,
+    )
+    latest_patch_validation = next(
+        (item for item in latest_patch_event.evidence if item.get("kind") == "patch_validation"),
+        None,
+    ) if latest_patch_event else None
     open_runs = [
         item for item in session_store.list_runs(project_id)
         if item.status != "resolved" and item.run_id != run_id
@@ -1020,6 +1028,12 @@ def review_incident_readiness(
             "count": len(open_runs),
             "run_ids": [item.run_id for item in open_runs[:10]],
         },
+        {
+            "kind": "latest_patch_validation",
+            "available": latest_patch_validation is not None,
+            "success": latest_patch_validation.get("success") if latest_patch_validation else None,
+            "summary": latest_patch_validation.get("summary") if latest_patch_validation else None,
+        },
     ]
     blockers = []
     if report.total_stories == 0:
@@ -1036,6 +1050,8 @@ def review_incident_readiness(
         blockers.append("The latest recorded validation check predates this incident; a fresh check is required.")
     elif latest_check.status != "healthy":
         blockers.append(f"The latest recorded validation check is {latest_check.status}, not healthy.")
+    if latest_patch_validation is not None and not latest_patch_validation.get("success"):
+        blockers.append("The latest proposed patch did not pass isolated validation.")
     if open_runs:
         blockers.append(f"{len(open_runs)} other incident run(s) remain unresolved.")
 
