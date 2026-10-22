@@ -179,6 +179,9 @@ export function MainStage({
   const recentEvidenceEvents = (recentEvents || []).slice(0, 6);
   const latestIncidentWorkflowEvent = incidentWorkflowEvents[incidentWorkflowEvents.length - 1] || null;
   const guardianReviewEvent = [...incidentWorkflowEvents].reverse().find((event) => event.event_type === "guardian_review");
+  const latestPatchEvent = [...incidentWorkflowEvents].reverse().find((event) => event.event_type === "patch_proposal_validation");
+  const latestPatchProposal = latestPatchEvent?.evidence?.find((item) => item.kind === "patch_proposal");
+  const latestPatchValidation = latestPatchEvent?.evidence?.find((item) => item.kind === "patch_validation");
   const guardianDecision = guardianReviewEvent?.evidence?.find((item) => item.kind === "guardian_decision")?.decision;
   const canRequestIncidentApproval = Boolean(
     guardianReviewEvent &&
