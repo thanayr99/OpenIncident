@@ -110,6 +110,7 @@ export function MainStage({
   runPredeployGate,
   runMissionControl,
   triageFirstIncident,
+  investigateFirstIncident,
   busy,
   launchDemoFlow,
 }) {
@@ -787,6 +788,14 @@ export function MainStage({
                 <h2>Incident Evidence</h2>
                 <span>{activeRuns.length} active</span>
               </header>
+              <button
+                className="primary-action"
+                onClick={investigateFirstIncident}
+                disabled={!activeRuns.length || busy.investigate}
+                type="button"
+              >
+                {busy.investigate ? "Investigating..." : "Investigate first incident"}
+              </button>
               {activeRuns.length ? activeRuns.slice(0, 4).map((run) => (
                 <button className="signal-row signal-button" key={run.run_id} onClick={() => setDetailPanel({
                   title: "Incident run detail",
