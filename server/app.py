@@ -109,6 +109,7 @@ from server.incident_workflow import (
     IncidentWorkflowEvent,
     IncidentWorkflowEventRequest,
     IncidentWorkflowStatus,
+    validate_patch_proposal,
 )
 from server.story_engine import build_generated_test_plan, execute_api_story, execute_frontend_story
 from server.test_environment import run_test_environment, validate_patch_and_run_tests, validate_test_environment_commands
