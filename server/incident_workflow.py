@@ -35,6 +35,17 @@ class IncidentPatchProposalRequest(BaseModel):
     patch: str = Field(min_length=1, max_length=100_000)
 
 
+class IncidentPatchGenerationRequest(BaseModel):
+    query: str | None = Field(default=None, max_length=500)
+
+
+class IncidentPatchDraftResponse(BaseModel):
+    summary: str
+    patch: str
+    model: str
+    context_files: list[str] = Field(default_factory=list)
+
+
 class IncidentWorkflowApprovalRequest(BaseModel):
     summary: str = Field(min_length=1, max_length=2000)
 
