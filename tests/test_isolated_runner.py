@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -46,7 +45,7 @@ def test_command_runner_uses_disposable_container_and_does_not_forward_secrets(
     assert args[args.index("--cpus") + 1] == "2"
     assert args[args.index("--pids-limit") + 1] == "256"
     assert args[args.index("--user") + 1] == "10001:10001"
-    assert args[args.index("--read-only"):]  # root filesystem is read-only
+    assert "--read-only" in args  # root filesystem is read-only
     assert any("dst=/source,readonly" in item for item in args if isinstance(item, str))
     assert "host-secret-must-not-leak" not in str(env)
     assert "PROJECT_SECRET" not in str(env)
@@ -61,3 +60,28 @@ def test_command_runner_rejects_unrecognized_network_mode(
 
     with pytest.raises(ValueError, match="must be 'none' or 'bridge'"):
         runner.run_shell_command("pytest", cwd=tmp_path)
+
+
+
+def test_command_runner_kills_only_its_container_on_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENINCIDENT_TEST_RUNNER_NETWORK", "none")
+    calls: list[list[str]] = []
+
+    def fake_run(args, **kwargs):  # noqa: ANN001
+        calls.append(args)
+        if args[:2] == ["docker", "run"]:
+            raise subprocess.TimeoutExpired(args, timeout=2)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        runner.run_shell_command("pytest", cwd=tmp_path, timeout_seconds=2)
+
+    assert len(calls) == 2
+    assert calls[0][:2] == ["docker", "run"]
+    assert calls[1][:2] == ["docker", "kill"]
+    assert calls[1][2] == calls[0][calls[0].index("--name") + 1]
