@@ -294,3 +294,116 @@ def test_guardian_ready_review_requires_human_approval_before_resolution(
     assert approval.status_code == 201, approval.text
     assert approval.json()["status"] == "resolved"
     assert appmod.session_store.get_run_by_id(run_id).status == "resolved"
+
+
+def test_patch_proposal_records_isolated_validation_and_blocks_failed_patch(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _headers(client, "PatchOwner", "workflow-patch-owner@example.com")
+    project_id, run_id = _project_and_run(client, headers)
+    workspace = tmp_path / "patch-workspace"
+    workspace.mkdir()
+    (workspace / "app.py").write_text("old\n", encoding="utf-8")
+    appmod.session_store.set_test_environment_config(
+        project_id,
+        appmod.TestEnvironmentConfigRequest(
+            repository_url="https://github.com/example/workflow-test",
+            install_command=None,
+            test_command="pytest -q",
+            enabled=True,
+            shell="sh",
+            env={},
+        ),
+    )
+    monkeypatch.setattr(appmod.session_store, "get_latest_test_environment_workspace", lambda _project_id: str(workspace))
+    monkeypatch.setattr(
+        appmod,
+        "validate_patch_and_run_tests",
+        lambda *args, **kwargs: {
+            "success": False,
+            "stage": "tests_failed",
+            "summary": "Patch applied, but regression tests failed.",
+            "return_code": 1,
+            "stdout": "1 failed",
+            "stderr": "AssertionError",
+            "changed_files": ["app.py"],
+            "diff": "--- a/app.py\\n+++ b/app.py",
+        },
+    )
+    workflow_url = f"/projects/{project_id}/incidents/{run_id}/workflow"
+    for status in ("detected", "investigating"):
+        response = client.post(workflow_url, headers=headers, json=_event(status))
+        assert response.status_code == 201, response.text
+    patch = """diff --git a/app.py b/app.py
+--- a/app.py
++++ b/app.py
+@@ -1 +1 @@
+-old
++new
+"""
+
+    response = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/patch-proposals",
+        headers=headers,
+        json={"summary": "Fix the failing condition", "patch": patch},
+    )
+    assert response.status_code == 201, response.text
+    event = response.json()
+    assert event["status"] == "failed"
+    proposal = next(item for item in event["evidence"] if item["kind"] == "patch_proposal")
+    validation = next(item for item in event["evidence"] if item["kind"] == "patch_validation")
+    assert proposal["diff"] == patch
+    assert validation["success"] is False
+    assert validation["stage"] == "tests_failed"
+    assert appmod.session_store.get_run_by_id(run_id).status == "failed"
+
+    review = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/guardian-review",
+        headers=headers,
+    )
+    assert review.status_code == 200, review.text
+    decision = next(item for item in review.json()["evidence"] if item["kind"] == "guardian_decision")
+    assert decision["decision"] == "blocked"
+    assert any("patch did not pass" in item.lower() for item in decision["blockers"])
+
+
+def test_patch_proposal_rejects_unsafe_diff_before_running_tests(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    headers = _headers(client, "UnsafePatchOwner", "workflow-unsafe-patch@example.com")
+    project_id, run_id = _project_and_run(client, headers)
+    workspace = tmp_path / "unsafe-patch-workspace"
+    workspace.mkdir()
+    appmod.session_store.set_test_environment_config(
+        project_id,
+        appmod.TestEnvironmentConfigRequest(repository_url="https://github.com/example/workflow-test", test_command="pytest", shell="sh"),
+    )
+    monkeypatch.setattr(appmod.session_store, "get_latest_test_environment_workspace", lambda _project_id: str(workspace))
+    called = False
+    def should_not_run(*args, **kwargs):
+        nonlocal called
+        called = True
+        return {"success": True}
+    monkeypatch.setattr(appmod, "validate_patch_and_run_tests", should_not_run)
+    workflow_url = f"/projects/{project_id}/incidents/{run_id}/workflow"
+    for status in ("detected", "investigating"):
+        response = client.post(workflow_url, headers=headers, json=_event(status))
+        assert response.status_code == 201, response.text
+    unsafe_patch = """diff --git a/../.env b/../.env
+--- a/../.env
++++ b/../.env
+@@ -1 +1 @@
+-SECRET=old
++SECRET=new
+"""
+    response = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/patch-proposals",
+        headers=headers,
+        json={"summary": "Unsafe patch", "patch": unsafe_patch},
+    )
+    assert response.status_code == 422
+    assert called is False
