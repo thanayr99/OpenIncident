@@ -412,3 +412,41 @@ def test_patch_proposal_rejects_unsafe_diff_before_running_tests(
     )
     assert response.status_code == 422
     assert called is False
+
+
+def test_patch_generation_returns_validated_draft_from_repository_context(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    headers = _headers(client, "PatchDraftOwner", "workflow-patch-draft@example.com")
+    project_id, run_id = _project_and_run(client, headers)
+    workflow_url = f"/projects/{project_id}/incidents/{run_id}/workflow"
+    for status in ("detected", "investigating"):
+        response = client.post(workflow_url, headers=headers, json=_event(status))
+        assert response.status_code == 201, response.text
+    patch = """diff --git a/app.py b/app.py
+--- a/app.py
++++ b/app.py
+@@ -1 +1 @@
+-old
++new
+"""
+    monkeypatch.setattr(
+        appmod,
+        "inspect_repository_for_query",
+        lambda project, query: SimpleNamespace(matches=[SimpleNamespace(path="app.py", snippet="def f(): return 'old'")]),
+    )
+    monkeypatch.setattr(appmod, "generate_patch_draft", lambda **kwargs: (patch, "test-model"))
+
+    response = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/patch-proposals/generate",
+        headers=headers,
+        json={"query": "fix app.py"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["patch"] == patch
+    assert response.json()["model"] == "test-model"
+    assert response.json()["context_files"] == ["app.py"]
