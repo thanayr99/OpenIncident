@@ -950,6 +950,21 @@ export default function App() {
       setStageView("evidence");
     });
   }
+  async function generateIncidentPatchDraft() {
+    const runId = incidentWorkflowRunId;
+    if (!runId || !selectedProjectId) {
+      setMessage("Investigate an incident before generating a patch draft.");
+      return;
+    }
+    await runTask("generatePatch", async () => {
+      const draft = await apiRequest(
+        "/projects/" + selectedProjectId + "/incidents/" + runId + "/patch-proposals/generate",
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setPatchProposalText(draft.patch);
+      setMessage(draft.summary + " Model: " + draft.model + ". Context files: " + draft.context_files.join(", "));
+    });
+  }
   async function proposeIncidentPatch() {
     const runId = incidentWorkflowRunId;
     if (!runId || !selectedProjectId || !patchProposalText.trim()) {
@@ -1389,6 +1404,7 @@ export default function App() {
         patchProposalText={patchProposalText}
         setPatchProposalText={setPatchProposalText}
         proposeIncidentPatch={proposeIncidentPatch}
+        generateIncidentPatchDraft={generateIncidentPatchDraft}
         busy={busy}
         launchDemoFlow={launchDemoFlow}
         runInstantAgentDemo={runInstantAgentDemo}
