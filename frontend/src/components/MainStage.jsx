@@ -891,6 +891,25 @@ export function MainStage({
                       <strong>{event.agent_role}: {event.event_type}</strong>
                     </button>
                   ))}
+                  {latestPatchProposal ? (
+                    <section className="overview-card" style={{ marginTop: "12px" }}>
+                      <header>
+                        <h3>Latest patch proposal</h3>
+                        <span>{latestPatchValidation?.success ? "Tests passed" : "Needs changes"}</span>
+                      </header>
+                      <p>{latestPatchProposal.summary}</p>
+                      <p className="muted">
+                        Branch: {latestPatchValidation?.branch_name || "openincident/patch-proposal"}
+                        {" · "}Files: {(latestPatchProposal.changed_files || []).join(", ") || "Not available"}
+                      </p>
+                      <pre style={{ maxHeight: "320px", overflow: "auto", whiteSpace: "pre", fontSize: "12px", padding: "12px", borderRadius: "8px" }}>
+                        {latestPatchProposal.diff}
+                      </pre>
+                      <p>{latestPatchValidation?.summary || "Validation result unavailable."}</p>
+                      {latestPatchValidation?.stdout ? <pre style={{ maxHeight: "160px", overflow: "auto", whiteSpace: "pre-wrap", fontSize: "11px" }}>{latestPatchValidation.stdout}</pre> : null}
+                      {latestPatchValidation?.stderr ? <pre style={{ maxHeight: "160px", overflow: "auto", whiteSpace: "pre-wrap", fontSize: "11px" }}>{latestPatchValidation.stderr}</pre> : null}
+                    </section>
+                  ) : null}
                 </div>
               ) : null}
               {activeRuns.length ? activeRuns.slice(0, 4).map((run) => (
