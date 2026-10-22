@@ -800,7 +800,7 @@ export function MainStage({
                 {busy.investigate ? "Investigating..." : "Investigate first incident"}
               </button>
               <button
-                className="secondary-action"
+                className="primary-action"
                 onClick={runIncidentGuardianReview}
                 disabled={!incidentWorkflowRunId || busy.guardianReview}
                 type="button"
