@@ -357,6 +357,7 @@ def test_patch_proposal_records_isolated_validation_and_blocks_failed_patch(
     assert proposal["diff"] == patch
     assert validation["success"] is False
     assert validation["stage"] == "tests_failed"
+    assert validation["branch_name"] == "openincident/patch-proposal"
     assert appmod.session_store.get_run_by_id(run_id).status == "failed"
 
     review = client.post(
