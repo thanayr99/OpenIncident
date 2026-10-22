@@ -965,6 +965,103 @@ def investigate_incident(
 
 
 @app.post(
+    "/projects/{project_id}/incidents/{run_id}/guardian-review",
+    response_model=IncidentWorkflowEvent,
+)
+def review_incident_readiness(
+    project_id: str,
+    run_id: str,
+    authorization: str | None = Header(default=None),
+) -> IncidentWorkflowEvent:
+    _require_project_access(project_id, authorization)
+    try:
+        run = session_store.get_run_by_id(run_id)
+        project = session_store.get_project(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Incident or project not found") from exc
+    if run.project is None or run.project.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Incident run not found")
+
+    history = list_incident_workflow_events(project_id, run_id, authorization)
+    if not history or history[-1].status not in {
+        IncidentWorkflowStatus.INVESTIGATING,
+        IncidentWorkflowStatus.TESTING,
+        IncidentWorkflowStatus.FAILED,
+    }:
+        raise HTTPException(status_code=409, detail="Incident must be investigated before Guardian review")
+
+    report = session_store.build_story_report(project_id)
+    checks = session_store.list_validation_snapshots(project_id)
+    latest_check = checks[-1] if checks else None
+    open_runs = [item for item in session_store.list_runs(project_id) if item.status != "resolved"]
+    evidence = [
+        {
+            "kind": "story_report",
+            "total_stories": report.total_stories,
+            "completed_stories": report.completed_stories,
+            "failed_stories": report.failed_stories,
+            "blocked_stories": report.blocked_stories,
+            "pending_stories": report.pending_stories,
+        },
+        {
+            "kind": "latest_validation_check",
+            "available": latest_check is not None,
+            "status": latest_check.status if latest_check else None,
+            "check_type": latest_check.check_type if latest_check else None,
+            "timestamp": latest_check.timestamp.isoformat() if latest_check else None,
+        },
+        {
+            "kind": "open_incidents",
+            "count": len(open_runs),
+            "run_ids": [item.run_id for item in open_runs[:10]],
+        },
+    ]
+    blockers = []
+    if report.total_stories == 0:
+        blockers.append("No user stories are registered; coverage is unknown.")
+    if report.failed_stories:
+        blockers.append(f"{report.failed_stories} user story/stories failed.")
+    if report.blocked_stories:
+        blockers.append(f"{report.blocked_stories} user story/stories are blocked.")
+    if report.pending_stories:
+        blockers.append(f"{report.pending_stories} user story/stories remain pending.")
+    if latest_check is None:
+        blockers.append("No recorded validation check is available.")
+    elif latest_check.status != "healthy":
+        blockers.append(f"The latest recorded validation check is {latest_check.status}, not healthy.")
+    if open_runs:
+        blockers.append(f"{len(open_runs)} incident run(s) remain unresolved, including this incident.")
+
+    decision = "blocked" if blockers else "ready_for_human_approval"
+    summary = (
+        "Guardian blocked readiness: " + " ".join(blockers)
+        if blockers
+        else "Recorded story, check, and incident signals meet the preliminary readiness rules. Human approval is still required."
+    )
+    session_store._record_event(
+        project_id,
+        event_type="incident_workflow",
+        title="Test Guardian readiness review",
+        message=summary[:2000],
+        severity="warning" if blockers else "info",
+        source="test_guardian",
+        related_run_id=run_id,
+        related_session_id=run.session_id,
+        metadata={
+            "status": history[-1].status.value,
+            "agent_role": "test_guardian",
+            "workflow_event_type": "guardian_review",
+            "evidence": evidence,
+            "confidence": 1.0 if latest_check is not None and report.total_stories else 0.0,
+            "decision": decision,
+            "blockers": blockers,
+            "automatic_deploy": False,
+        },
+    )
+    records = list_incident_workflow_events(project_id, run_id, authorization)
+    return records[-1]
+
+@app.post(
     "/projects/{project_id}/incidents/{run_id}/approve",
     response_model=IncidentWorkflowEvent,
     status_code=201,
