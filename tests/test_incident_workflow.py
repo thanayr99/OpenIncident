@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -237,3 +238,59 @@ def test_guardian_review_rejects_run_from_another_project(
         headers=headers,
     )
     assert response.status_code == 404
+
+
+def test_guardian_ready_review_requires_human_approval_before_resolution(
+    client: TestClient,
+) -> None:
+    headers = _headers(client, "ReadyGuardian", "workflow-guardian-ready@example.com")
+    project_id, run_id = _project_and_run(client, headers)
+    story_response = client.post(
+        f"/projects/{project_id}/stories",
+        headers=headers,
+        json={"stories": [{"title": "Health check", "description": "API health remains good", "acceptance_criteria": ["Health returns 200"], "tags": ["api"]}]},
+    )
+    assert story_response.status_code == 200, story_response.text
+    story = appmod.session_store.get_story(story_response.json()[0]["story_id"])
+    story.status = appmod.StoryStatus.COMPLETED
+    appmod.session_store._stories[story.story_id] = story
+    appmod.session_store._save()
+    appmod.session_store.add_validation_snapshot(
+        appmod.ProjectValidationSnapshot(
+            project_id=project_id,
+            check_type="health",
+            label="Fresh health validation",
+            target_url="https://example.com/health",
+            status="healthy",
+            checked_at=datetime.now(timezone.utc),
+        )
+    )
+    workflow_url = f"/projects/{project_id}/incidents/{run_id}/workflow"
+    for status in ("detected", "investigating"):
+        response = client.post(workflow_url, headers=headers, json=_event(status))
+        assert response.status_code == 201, response.text
+
+    review = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/guardian-review",
+        headers=headers,
+    )
+    assert review.status_code == 200, review.text
+    decision = next(item for item in review.json()["evidence"] if item["kind"] == "guardian_decision")
+    assert decision["decision"] == "ready_for_human_approval"
+
+    request_approval = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/request-approval",
+        headers=headers,
+    )
+    assert request_approval.status_code == 200, request_approval.text
+    assert request_approval.json()[-1]["status"] == "awaiting_approval"
+    assert appmod.session_store.get_run_by_id(run_id).status == "awaiting_approval"
+
+    approval = client.post(
+        f"/projects/{project_id}/incidents/{run_id}/approve",
+        headers=headers,
+        json={"summary": "Reviewed the evidence and approved incident resolution."},
+    )
+    assert approval.status_code == 201, approval.text
+    assert approval.json()["status"] == "resolved"
+    assert appmod.session_store.get_run_by_id(run_id).status == "resolved"
