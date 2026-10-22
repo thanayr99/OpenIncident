@@ -114,6 +114,8 @@ export function MainStage({
   incidentWorkflowEvents = [],
   incidentWorkflowRunId,
   runIncidentGuardianReview,
+  requestIncidentApproval,
+  approveIncidentResolution,
   busy,
   launchDemoFlow,
 }) {
@@ -172,6 +174,15 @@ export function MainStage({
   const latestConversationItems = (conversations.length ? conversations : fallbackMessages).slice(0, 8);
   const latestHandoffItems = (handoffs.length ? handoffs.slice(0, 7).reverse() : fallbackHandoffs);
   const recentEvidenceEvents = (recentEvents || []).slice(0, 6);
+  const latestIncidentWorkflowEvent = incidentWorkflowEvents[incidentWorkflowEvents.length - 1] || null;
+  const guardianReviewEvent = [...incidentWorkflowEvents].reverse().find((event) => event.event_type === "guardian_review");
+  const guardianDecision = guardianReviewEvent?.evidence?.find((item) => item.kind === "guardian_decision")?.decision;
+  const canRequestIncidentApproval = Boolean(
+    guardianReviewEvent &&
+    guardianDecision === "ready_for_human_approval" &&
+    latestIncidentWorkflowEvent?.event_type === "guardian_review"
+  );
+  const canApproveIncident = latestIncidentWorkflowEvent?.status === "awaiting_approval";
   const trainingDetailMap = {
     planner: {
       title: "Planner dataset records",
@@ -807,6 +818,23 @@ export function MainStage({
               >
                 {busy.guardianReview ? "Reviewing readiness..." : "Run Test Guardian review"}
               </button>
+              <button
+                className="primary-action"
+                onClick={requestIncidentApproval}
+                disabled={!canRequestIncidentApproval || busy.requestApproval}
+                type="button"
+              >
+                {busy.requestApproval ? "Requesting approval..." : "Request human approval"}
+              </button>
+              <button
+                className="primary-action"
+                onClick={approveIncidentResolution}
+                disabled={!canApproveIncident || busy.approveIncident}
+                type="button"
+              >
+                {busy.approveIncident ? "Recording approval..." : "Approve incident resolution"}
+              </button>
+
               {incidentWorkflowRunId ? (
                 <div className="incident-timeline">
                   <div className="signal-row">
