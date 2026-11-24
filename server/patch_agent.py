@@ -93,6 +93,8 @@ def generate_patch_draft(
     patch = _extract_diff(completion.output_text or "")
     if not patch:
         raise ValueError("The model did not return a unified diff. Add more repository evidence or write the patch manually.")
+    if not patch.endswith("\n"):
+        patch += "\n"
     issues = validate_patch_proposal(patch)
     if issues:
         raise ValueError("Generated patch rejected by safety validation: " + " ".join(issues))
